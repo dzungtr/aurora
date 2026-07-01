@@ -61,12 +61,49 @@ function loadExpanded(): Set<string> {
 }
 
 function saveExpanded(expanded: Set<string>) {
-  localStorage.setItem("zui-explorer:expanded", JSON.stringify([...expanded]));
+  try {
+    localStorage.setItem("zui-explorer:expanded", JSON.stringify([...expanded]));
+  } catch {
+    // ignore: localStorage unavailable/throwing, persistence is best-effort
+  }
 }
 
 function loadWidth(): number {
   const raw = localStorage.getItem("zui-explorer:sidebar-width");
   return raw ? Number(raw) : 260;
+}
+
+function saveWidth(width: number) {
+  try {
+    localStorage.setItem("zui-explorer:sidebar-width", String(width));
+  } catch {
+    // ignore: localStorage unavailable/throwing, persistence is best-effort
+  }
+}
+
+function FolderIcon({ color }: { color: string }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M1.5 3.5A1 1 0 0 1 2.5 2.5h3.086a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 0 .707.293H13.5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-8.5Z"
+        fill={color}
+      />
+    </svg>
+  );
+}
+
+function FileIcon({ color }: { color: string }) {
+  return (
+    <svg width="12" height="13" viewBox="0 0 14 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M2.5 1.5h5l4 4v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Z"
+        fill="none"
+        stroke={color}
+        strokeWidth="1.2"
+      />
+      <path d="M7.5 1.5v4h4" fill="none" stroke={color} strokeWidth="1.2" />
+    </svg>
+  );
 }
 
 export function FileTree({ entries, selectedPath, onSelect, onCreateFile, onCreateDir, onRename, onDelete }: FileTreeProps) {
@@ -105,7 +142,7 @@ export function FileTree({ entries, selectedPath, onSelect, onCreateFile, onCrea
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       setWidth((w) => {
-        localStorage.setItem("zui-explorer:sidebar-width", String(w));
+        saveWidth(w);
         return w;
       });
     };
@@ -124,8 +161,13 @@ export function FileTree({ entries, selectedPath, onSelect, onCreateFile, onCrea
           style={{ paddingLeft: depth * 14 }}
           onClick={() => (node.isDir ? toggle(node.path) : onSelect(node.path))}
         >
+          {node.isDir && (
+            <span className="wsp-tree-chevron" style={{ color: "#8a94a6" }}>
+              {isExpanded ? "▾" : "▸"}
+            </span>
+          )}
           <span className="wsp-tree-icon" style={{ color: node.isDir ? "#8a94a6" : color }}>
-            {node.isDir ? (isExpanded ? "▾" : "▸") : "●"}
+            {node.isDir ? <FolderIcon color="#8a94a6" /> : <FileIcon color={color} />}
           </span>
           <span className="wsp-tree-name">{node.name}</span>
           <span className="wsp-tree-actions">
