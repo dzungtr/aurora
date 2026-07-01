@@ -1,0 +1,266 @@
+:root {
+  --bg: #0b0e14;
+  --bg-2: #11151f;
+  --border: #232a3a;
+  --text: #d6deeb;
+  --accent: #5b8cff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+.wsp-editor-body {
+  display: flex;
+  height: 100vh;
+}
+
+.wsp-editor-sidebar {
+  position: relative;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wsp-editor-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+.wsp-status {
+  padding: 4px 12px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.wsp-empty {
+  padding: 24px;
+  color: #6b7280;
+}
+
+.wsp-tree {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.wsp-tree-search {
+  margin: 8px;
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+}
+
+.wsp-tree-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.wsp-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wsp-tree-row:hover {
+  background: rgba(91, 140, 255, 0.08);
+}
+
+.wsp-tree-row.selected {
+  background: rgba(91, 140, 255, 0.18);
+}
+
+.wsp-tree-icon {
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.wsp-tree-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wsp-tree-actions {
+  display: none;
+  gap: 2px;
+}
+
+.wsp-tree-row:hover .wsp-tree-actions {
+  display: flex;
+}
+
+.wsp-tree-actions button {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.wsp-tree-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.wsp-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.wsp-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wsp-dirty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.wsp-dirty-dot.dirty {
+  background: var(--accent);
+}
+
+.wsp-editor-path {
+  flex: 1;
+  color: #9aa5b1;
+}
+
+.wsp-save-btn {
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.wsp-save-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.wsp-editor-pane {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.wsp-line-numbers {
+  padding: 8px 8px 8px 0;
+  text-align: right;
+  color: #4b5563;
+  user-select: none;
+  font-family: ui-monospace, monospace;
+}
+
+.wsp-editor-code {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+}
+
+.wsp-editor-highlight,
+.wsp-editor-textarea {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+  box-sizing: border-box;
+}
+
+.wsp-editor-highlight {
+  color: var(--text);
+  pointer-events: none;
+}
+
+.wsp-editor-textarea {
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  border: none;
+  resize: none;
+  outline: none;
+  z-index: 1;
+}
+
+.tok-key { color: #5b8cff; }
+.tok-str { color: #a8cc8c; }
+.tok-num { color: #f78c6c; }
+.tok-bool, .tok-null { color: #c792ea; }
+.tok-tag { color: #5b8cff; }
+.tok-attr { color: #a8cc8c; }
+.tok-selector { color: #f78c6c; }
+.tok-heading { color: #5b8cff; font-weight: bold; }
+.tok-bold { font-weight: bold; }
+.tok-code { color: #a8cc8c; }
+.tok-keyword { color: #c792ea; }
+
+.wsp-toggle {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.wsp-markdown-preview {
+  padding: 16px 24px;
+  overflow: auto;
+}
+
+.wsp-markdown-preview h1, .wsp-markdown-preview h2, .wsp-markdown-preview h3 {
+  color: var(--text);
+}
+
+.wsp-image-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 16px;
+}
+
+.wsp-image-preview img {
+  max-width: 100%;
+  max-height: 100%;
+}
