@@ -41,6 +41,7 @@ export function createServer(rootDir: string, port: number) {
   const root = resolve(rootDir);
   return Bun.serve({
     port,
+    hostname: "127.0.0.1",
     development: process.env.NODE_ENV !== "production",
     routes: {
       "/": indexHtml,

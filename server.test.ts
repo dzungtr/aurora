@@ -20,6 +20,12 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
+describe("createServer", () => {
+  it("binds only to loopback, never to all interfaces", () => {
+    expect(server.hostname).toBe("127.0.0.1");
+  });
+});
+
 describe("/api/tree", () => {
   it("lists files under root", async () => {
     const res = await fetch(`${base}/api/tree`);
