@@ -9,7 +9,12 @@ function parseArgs(argv: string[]) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--port") {
-      port = Number(args[++i]);
+      const value = Number(args[++i]);
+      if (Number.isNaN(value)) {
+        console.error("Usage: zui-explorer <path> [--port <port>]");
+        process.exit(1);
+      }
+      port = value;
     } else {
       positional.push(arg);
     }

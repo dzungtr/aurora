@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "./server";
@@ -62,6 +62,28 @@ describe("/api/file", () => {
     expect(res.status).toBe(200);
     const check = await fetch(`${base}/api/file?path=hello.txt`);
     expect(check.status).toBe(404);
+  });
+
+  it("refuses to delete the root via path=.", async () => {
+    const res = await fetch(`${base}/api/file?path=.`, { method: "DELETE" });
+    expect(res.status).toBe(400);
+    expect(existsSync(root)).toBe(true);
+    expect(existsSync(join(root, "hello.txt"))).toBe(true);
+  });
+
+  it("refuses to delete a directory via /api/file", async () => {
+    mkdirSync(join(root, "subdir"));
+    const res = await fetch(`${base}/api/file?path=subdir`, { method: "DELETE" });
+    expect(res.status).toBe(400);
+    expect(existsSync(join(root, "subdir"))).toBe(true);
+  });
+
+  it("never leaks the server's absolute root path in error bodies", async () => {
+    rmSync(root, { recursive: true, force: true });
+    const res = await fetch(`${base}/api/tree`);
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).not.toContain(root);
   });
 });
 
