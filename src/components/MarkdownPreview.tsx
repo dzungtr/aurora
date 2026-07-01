@@ -10,6 +10,10 @@ function sanitizeUrl(url: string): string {
   return url.replace(/[\t\n\r]/g, "").trim();
 }
 
+function escapeAttr(value: string): string {
+  return value.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 function isSafeUrl(cleanedUrl: string): boolean {
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(cleanedUrl)) {
     return /^(https?|mailto):/i.test(cleanedUrl);
@@ -24,7 +28,7 @@ function inline(text: string): string {
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\[([^\]]+)\]\(((?:[^()]|\([^()]*\))*)\)/g, (match, label, url) => {
       const cleaned = sanitizeUrl(url);
-      return isSafeUrl(cleaned) ? `<a href="${cleaned}">${label}</a>` : label;
+      return isSafeUrl(cleaned) ? `<a href="${escapeAttr(cleaned)}">${label}</a>` : label;
     });
 }
 
