@@ -6,12 +6,22 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function isSafeUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+    return /^(https?|mailto):/i.test(trimmed);
+  }
+  return true;
+}
+
 function inline(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
     .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)]*(?:\)[^)]*)*)\)/g, (match, label, url) =>
+      isSafeUrl(url) ? `<a href="${url}">${label}</a>` : label,
+    );
 }
 
 function renderMarkdown(text: string): string {
