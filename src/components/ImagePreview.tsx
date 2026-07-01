@@ -1,7 +1,13 @@
+import { api } from "../lib/api";
+
 export interface ImagePreviewProps {
   path: string;
 }
 
-export function ImagePreview(_props: ImagePreviewProps) {
-  return <div className="wsp-image-preview">(image preview placeholder)</div>;
+export function ImagePreview({ path }: ImagePreviewProps) {
+  return (
+    <div className="wsp-image-preview">
+      <img src={api.fileUrl(path)} alt={path} />
+    </div>
+  );
 }
