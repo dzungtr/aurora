@@ -4,7 +4,7 @@ import { createServer } from "./server";
 
 function parseArgs(argv: string[]) {
   const args = argv.slice(2);
-  let port = 3000;
+  let port = 4287;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
