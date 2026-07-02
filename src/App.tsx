@@ -1,173 +1,322 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type TreeEntry } from "./lib/api";
+import { isEditable, kindOf } from "./lib/fileTypes";
+import { TopBar } from "./components/TopBar";
+import { CommandBar } from "./components/CommandBar";
 import { FileTree } from "./components/FileTree";
-import { FileEditor } from "./components/FileEditor";
-import { MarkdownPreview } from "./components/MarkdownPreview";
-import { ImagePreview } from "./components/ImagePreview";
+import { Tabs } from "./components/Tabs";
+import { Toolbar } from "./components/Toolbar";
+import { Inspector } from "./components/Inspector";
+import { Viewer } from "./components/viewers/Viewer";
+import { Icon } from "./components/Icon";
 
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"]);
-const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"]);
+export type Layout = "workspace" | "focus";
 
-function extOf(path: string): string {
-  const idx = path.lastIndexOf(".");
-  return idx === -1 ? "" : path.slice(idx + 1).toLowerCase();
+/** Editable text buffer: `content` is the working copy, `disk` the last-saved value. */
+export interface Buffer {
+  content: string;
+  disk: string;
+}
+
+/** Per-file view controls surfaced in the toolbar. Reset when the file changes. */
+export interface ViewState {
+  fit: boolean;
+  zoom: number;
+  rotate: number;
+  mdMode: "edit" | "split" | "preview";
+  wrap: boolean;
+  pdfZoom: number;
+}
+
+const DEFAULT_VIEW: ViewState = {
+  fit: true, zoom: 1, rotate: 0, mdMode: "split", wrap: false, pdfZoom: 1,
+};
+
+const EXPANDED_KEY = "aurora:expanded";
+
+function loadExpanded(): Set<string> {
+  try {
+    const raw = localStorage.getItem(EXPANDED_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
 }
 
 export function App() {
   const [entries, setEntries] = useState<TreeEntry[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [content, setContent] = useState("");
-  const [diskContent, setDiskContent] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState(false);
-  const selectedRef = useRef(selectedPath);
-  selectedRef.current = selectedPath;
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
+  const [buffers, setBuffers] = useState<Record<string, Buffer>>({});
+  const [expanded, setExpanded] = useState<Set<string>>(loadExpanded);
+  const [filter, setFilter] = useState("");
+  const [layout, setLayout] = useState<Layout>("workspace");
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [view, setView] = useState<ViewState>(DEFAULT_VIEW);
+  const [pdf, setPdf] = useState({ page: 1, count: 0 });
+  const [toast, setToast] = useState<string | null>(null);
+  const [creating, setCreating] = useState<"file" | "dir" | null>(null);
 
-  const dirty = content !== diskContent;
+  const toastTimer = useRef<number | undefined>(undefined);
+  const flash = useCallback((msg: string) => {
+    setToast(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 1800);
+  }, []);
 
+  /* ------------------------------- Data + tree ------------------------------ */
   const refreshTree = useCallback(async () => {
-    try {
-      const tree = await api.getTree();
-      setEntries(tree);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
-    }
+    try { setEntries(await api.getTree()); } catch { /* transient — next poll retries */ }
   }, []);
 
   useEffect(() => {
     refreshTree();
-    const id = setInterval(refreshTree, 5000);
+    const id = window.setInterval(refreshTree, 5000);
     return () => clearInterval(id);
   }, [refreshTree]);
 
-  useEffect(() => {
-    const id = setInterval(async () => {
-      const path = selectedRef.current;
-      if (!path || IMAGE_EXTENSIONS.has(extOf(path))) return;
-      try {
-        const latest = await api.readFile(path);
-        setDiskContent((prev) => (latest !== prev && path === selectedRef.current ? latest : prev));
-      } catch {
-        // transient poll error — ignore, next tick will retry
-      }
-    }, 5000);
-    return () => clearInterval(id);
-  }, []);
+  const entryFor = useMemo(() => {
+    const map = new Map(entries.map((e) => [e.path, e]));
+    return (p: string | null) => (p ? map.get(p) : undefined);
+  }, [entries]);
 
+  /* ------------------------------ File actions ------------------------------ */
   const openFile = useCallback(async (path: string) => {
-    if (dirty) {
-      const ok = window.confirm(`Discard unsaved changes to ${selectedPath}?`);
-      if (!ok) return;
-    }
     setSelectedPath(path);
-    setPreviewMode(false);
-    if (IMAGE_EXTENSIONS.has(extOf(path))) {
-      setContent("");
-      setDiskContent("");
-      return;
-    }
+    setOpenTabs((t) => (t.includes(path) ? t : [...t, path]));
+    setView(DEFAULT_VIEW);
+    setPdf({ page: 1, count: 0 });
+    if (!isEditable(kindOf(path))) return; // binary → streamed, no buffer needed
+    if (buffers[path]) return;             // already loaded
     try {
       const text = await api.readFile(path);
-      setContent(text);
-      setDiskContent(text);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      setBuffers((prev) => ({ ...prev, [path]: { content: text, disk: text } }));
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e));
     }
-  }, [dirty, selectedPath]);
+  }, [buffers, flash]);
+
+  const toggleDir = useCallback((path: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(path) ? next.delete(path) : next.add(path);
+      try { localStorage.setItem(EXPANDED_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  const closeTab = useCallback((path: string) => {
+    setOpenTabs((tabs) => {
+      const idx = tabs.indexOf(path);
+      const next = tabs.filter((p) => p !== path);
+      setSelectedPath((sel) => (sel === path ? (next[idx - 1] ?? next[idx] ?? next[next.length - 1] ?? null) : sel));
+      return next;
+    });
+  }, []);
+
+  const buffer = selectedPath ? buffers[selectedPath] : undefined;
+  const dirty = !!buffer && buffer.content !== buffer.disk;
+
+  const setContent = useCallback((v: string) => {
+    if (!selectedPath) return;
+    setBuffers((b) => ({ ...b, [selectedPath]: { content: v, disk: b[selectedPath]?.disk ?? v } }));
+  }, [selectedPath]);
 
   const save = useCallback(async () => {
-    if (!selectedPath) return;
+    if (!selectedPath || !buffer || !dirty) return;
     try {
+      // Optimistic conflict check, mirroring the original server flow.
       const latest = await api.readFile(selectedPath);
-      if (latest !== diskContent) {
-        const ok = window.confirm("This file changed on disk since it was loaded. Overwrite with your changes?");
-        if (!ok) {
-          setDiskContent(latest);
-          return;
-        }
+      if (latest !== buffer.disk && !window.confirm("This file changed on disk since it was loaded. Overwrite with your changes?")) {
+        setBuffers((b) => ({ ...b, [selectedPath]: { ...b[selectedPath], disk: latest } }));
+        return;
       }
-      await api.writeFile(selectedPath, content);
-      setDiskContent(content);
-      setStatus("Saved");
+      await api.writeFile(selectedPath, buffer.content);
+      setBuffers((b) => ({ ...b, [selectedPath]: { content: buffer.content, disk: buffer.content } }));
+      flash("Saved " + selectedPath.split("/").pop());
       refreshTree();
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e));
     }
-  }, [selectedPath, content, diskContent, refreshTree]);
+  }, [selectedPath, buffer, dirty, flash, refreshTree]);
 
-  const createFile = useCallback(async (path: string) => {
-    try {
-      await api.writeFile(path, "");
-      await refreshTree();
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
-    }
-  }, [refreshTree]);
+  const openInNewTab = useCallback(() => {
+    if (selectedPath) window.open(api.fileUrl(selectedPath), "_blank", "noopener,noreferrer");
+  }, [selectedPath]);
 
-  const createDir = useCallback(async (path: string) => {
+  const copyPath = useCallback(() => {
+    if (!selectedPath) return;
+    navigator.clipboard?.writeText(selectedPath).catch(() => { /* ignore */ });
+    flash("Path copied");
+  }, [selectedPath, flash]);
+
+  /* ---------------------------------- CRUD ----------------------------------- */
+  /** Kicks off inline creation in FileTree's root row; `creating` drives what it renders. */
+  const commitCreate = useCallback(async (name: string) => {
+    const kind = creating;
+    setCreating(null);
+    const trimmed = name.trim();
+    if (!kind || !trimmed) return;
     try {
-      await api.createDir(path);
+      if (kind === "dir") await api.createDir(trimmed);
+      else await api.writeFile(trimmed, "");
       await refreshTree();
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      if (kind === "file") openFile(trimmed);
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e));
     }
-  }, [refreshTree]);
+  }, [creating, refreshTree, openFile, flash]);
+
+  const cancelCreate = useCallback(() => setCreating(null), []);
 
   const renamePath = useCallback(async (from: string, to: string) => {
     try {
       await api.rename(from, to);
-      if (selectedPath === from) setSelectedPath(to);
+      setOpenTabs((tabs) => tabs.map((p) => (p === from ? to : p)));
+      setBuffers((b) => {
+        if (!(from in b)) return b;
+        const next = { ...b };
+        next[to] = next[from];
+        delete next[from];
+        return next;
+      });
+      setSelectedPath((sel) => (sel === from ? to : sel));
       await refreshTree();
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e));
     }
-  }, [refreshTree, selectedPath]);
+  }, [refreshTree, flash]);
 
-  const deletePath = useCallback(async (path: string) => {
+  const deleteEntry = useCallback(async (path: string) => {
     try {
       await api.deleteFile(path);
-      if (selectedPath === path) {
-        setSelectedPath(null);
-        setContent("");
-        setDiskContent("");
-      }
+      setOpenTabs((tabs) => tabs.filter((p) => p !== path));
+      setBuffers((b) => {
+        if (!(path in b)) return b;
+        const next = { ...b };
+        delete next[path];
+        return next;
+      });
+      setSelectedPath((sel) => (sel === path ? null : sel));
       await refreshTree();
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e));
     }
-  }, [refreshTree, selectedPath]);
+  }, [refreshTree, flash]);
 
-  const ext = selectedPath ? extOf(selectedPath) : "";
-  const isImage = IMAGE_EXTENSIONS.has(ext);
-  const isMarkdown = MARKDOWN_EXTENSIONS.has(ext);
+  /* --------------------------------- Keyboard ------------------------------- */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        save();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [save]);
 
+  const patchView = useCallback((p: Partial<ViewState>) => setView((v) => ({ ...v, ...p })), []);
+  const onPdfPage = useCallback((page: number, count: number) => setPdf({ page, count }), []);
+
+  /* --------------------------------- Render --------------------------------- */
   return (
-    <div className="wsp-editor-body">
-      <div className="wsp-editor-sidebar">
+    <div className="aur" data-theme="dark">
+      <TopBar
+        filter={filter}
+        onFilter={setFilter}
+        layout={layout}
+        onLayout={setLayout}
+        onNewFile={() => setCreating("file")}
+        onNewFolder={() => setCreating("dir")}
+      />
+
+      {layout === "focus" && (
+        <CommandBar
+          path={selectedPath}
+          inspectorOpen={inspectorOpen}
+          onToggleInspector={() => setInspectorOpen((o) => !o)}
+        />
+      )}
+
+      <div className="aur-body">
         <FileTree
           entries={entries}
+          filter={filter}
+          onFilter={setFilter}
+          expanded={expanded}
+          onToggle={toggleDir}
           selectedPath={selectedPath}
           onSelect={openFile}
-          onCreateFile={createFile}
-          onCreateDir={createDir}
+          creating={creating}
+          onCommitCreate={commitCreate}
+          onCancelCreate={cancelCreate}
           onRename={renamePath}
-          onDelete={deletePath}
+          onDelete={deleteEntry}
         />
-      </div>
-      <div className="wsp-editor-main">
-        {status && <div className="wsp-status">{status}</div>}
-        {!selectedPath && <div className="wsp-empty">Select a file to view or edit</div>}
-        {selectedPath && isImage && <ImagePreview path={selectedPath} />}
-        {selectedPath && !isImage && isMarkdown && previewMode && <MarkdownPreview content={content} />}
-        {selectedPath && !isImage && (!isMarkdown || !previewMode) && (
-          <FileEditor path={selectedPath} content={content} dirty={dirty} onChange={setContent} onSave={save} />
+
+        <main className="aur-main">
+          <Tabs
+            tabs={openTabs}
+            selectedPath={selectedPath}
+            buffers={buffers}
+            onSelect={openFile}
+            onClose={closeTab}
+          />
+
+          {selectedPath ? (
+            <>
+              <Toolbar
+                path={selectedPath}
+                layout={layout}
+                dirty={dirty}
+                onSave={save}
+                view={view}
+                onView={patchView}
+                pdfPage={pdf.page}
+                pdfCount={pdf.count}
+                onOpen={openInNewTab}
+                inspectorOpen={inspectorOpen}
+                onToggleInspector={() => setInspectorOpen((o) => !o)}
+              />
+              <div className="aur-content">
+                <Viewer
+                  key={selectedPath}
+                  path={selectedPath}
+                  buffer={buffer}
+                  onChange={setContent}
+                  view={view}
+                  onPdfPage={onPdfPage}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="aur-content">
+              <div className="aur-empty">
+                <Icon name="uil:file-search-alt" size={52} color="var(--e3)" />
+                <div>Select a file to view or edit</div>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {selectedPath && inspectorOpen && (
+          <Inspector
+            path={selectedPath}
+            entry={entryFor(selectedPath)}
+            buffer={buffer}
+            isFocus={layout === "focus"}
+            onClose={() => setInspectorOpen(false)}
+            onOpen={openInNewTab}
+            onCopyPath={copyPath}
+          />
         )}
-        {selectedPath && isMarkdown && !isImage && (
-          <button className="wsp-toggle" onClick={() => setPreviewMode((v) => !v)}>
-            {previewMode ? "Edit" : "Preview"}
-          </button>
-        )}
       </div>
+
+      {toast && (
+        <div className="aur-toast">
+          <Icon name="uil:check-circle" size={18} color="var(--positive)" />
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
