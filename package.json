@@ -12,8 +12,10 @@
     "compile": "bun build ./cli.ts --compile --outfile zui-explorer"
   },
   "dependencies": {
+    "@iconify/react": "^5.0.2",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-pdf": "^9.1.1"
   },
   "devDependencies": {
     "@types/bun": "latest",
