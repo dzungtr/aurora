@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "bun --hot cli.ts .",
-    "test": "bun test"
+    "test": "bun test",
+    "compile": "bun build ./cli.ts --compile --outfile zui-explorer"
   },
   "dependencies": {
     "react": "^19.0.0",
