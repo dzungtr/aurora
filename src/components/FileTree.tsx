@@ -1,12 +1,19 @@
-import { useMemo, useState, useRef, useCallback, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { TreeEntry } from "../lib/api";
+import { baseName, colorFor, iconFor } from "../lib/fileTypes";
+import { Icon } from "./Icon";
 
 export interface FileTreeProps {
   entries: TreeEntry[];
+  filter: string;
+  onFilter: (v: string) => void;
+  expanded: Set<string>;
+  onToggle: (path: string) => void;
   selectedPath: string | null;
   onSelect: (path: string) => void;
-  onCreateFile: (path: string) => void;
-  onCreateDir: (path: string) => void;
+  creating: "file" | "dir" | null;
+  onCommitCreate: (name: string) => void;
+  onCancelCreate: () => void;
   onRename: (from: string, to: string) => void;
   onDelete: (path: string) => void;
 }
@@ -18,16 +25,17 @@ interface Node {
   children: Node[];
 }
 
-const EXT_COLORS: Record<string, string> = {
-  ts: "#3178c6", tsx: "#3178c6", js: "#f1e05a", jsx: "#f1e05a",
-  json: "#cbcb41", md: "#519aba", markdown: "#519aba", css: "#563d7c",
-  html: "#e34c26", png: "#a074c4", jpg: "#a074c4", jpeg: "#a074c4",
-  gif: "#a074c4", svg: "#ffb13b",
-};
+interface FlatRow {
+  node: Node;
+  depth: number;
+  expanded: boolean;
+}
 
-function extOf(name: string): string {
-  const idx = name.lastIndexOf(".");
-  return idx === -1 ? "" : name.slice(idx + 1).toLowerCase();
+interface MenuState {
+  path: string;
+  isDir: boolean;
+  x: number;
+  y: number;
 }
 
 function buildTree(entries: TreeEntry[]): Node[] {
@@ -43,154 +51,210 @@ function buildTree(entries: TreeEntry[]): Node[] {
     parent.children.push(node);
     if (entry.isDir) byPath.set(entry.path, node);
   }
-  const sortNode = (node: Node) => {
-    node.children.sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name)));
-    node.children.forEach(sortNode);
+  const sortNode = (n: Node) => {
+    n.children.sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name)));
+    n.children.forEach(sortNode);
   };
   sortNode(root);
   return root.children;
 }
 
-function loadExpanded(): Set<string> {
-  try {
-    const raw = localStorage.getItem("zui-explorer:expanded");
-    return raw ? new Set(JSON.parse(raw)) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-function saveExpanded(expanded: Set<string>) {
-  try {
-    localStorage.setItem("zui-explorer:expanded", JSON.stringify([...expanded]));
-  } catch {
-    // ignore: localStorage unavailable/throwing, persistence is best-effort
-  }
-}
-
-function loadWidth(): number {
-  const raw = localStorage.getItem("zui-explorer:sidebar-width");
-  return raw ? Number(raw) : 260;
-}
-
-function saveWidth(width: number) {
-  try {
-    localStorage.setItem("zui-explorer:sidebar-width", String(width));
-  } catch {
-    // ignore: localStorage unavailable/throwing, persistence is best-effort
-  }
-}
-
-function FolderIcon({ color }: { color: string }) {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M1.5 3.5A1 1 0 0 1 2.5 2.5h3.086a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 0 .707.293H13.5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-8.5Z"
-        fill={color}
-      />
-    </svg>
-  );
-}
-
-function FileIcon({ color }: { color: string }) {
-  return (
-    <svg width="12" height="13" viewBox="0 0 14 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M2.5 1.5h5l4 4v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Z"
-        fill="none"
-        stroke={color}
-        strokeWidth="1.2"
-      />
-      <path d="M7.5 1.5v4h4" fill="none" stroke={color} strokeWidth="1.2" />
-    </svg>
-  );
-}
-
-export function FileTree({ entries, selectedPath, onSelect, onCreateFile, onCreateDir, onRename, onDelete }: FileTreeProps) {
-  const [filter, setFilter] = useState("");
-  const [expanded, setExpanded] = useState<Set<string>>(loadExpanded);
-  const [width, setWidth] = useState(loadWidth);
-  const draggingRef = useRef(false);
-
+export function FileTree({
+  entries, filter, onFilter, expanded, onToggle, selectedPath, onSelect,
+  creating, onCommitCreate, onCancelCreate, onRename, onDelete,
+}: FileTreeProps) {
   const tree = useMemo(() => buildTree(entries), [entries]);
+  const q = filter.trim().toLowerCase();
 
-  const toggle = useCallback((path: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      saveExpanded(next);
-      return next;
-    });
-  }, []);
+  const matches = useMemo(() => {
+    const fn = (node: Node): boolean => {
+      if (!q) return true;
+      if (node.name.toLowerCase().includes(q)) return true;
+      return node.children.some(fn);
+    };
+    return fn;
+  }, [q]);
 
-  const matchesFilter = useCallback((node: Node): boolean => {
-    if (!filter) return true;
-    if (node.name.toLowerCase().includes(filter.toLowerCase())) return true;
-    return node.children.some(matchesFilter);
-  }, [filter]);
+  const rows = useMemo(() => {
+    const out: FlatRow[] = [];
+    const walk = (nodes: Node[], depth: number) => {
+      for (const node of nodes) {
+        if (!matches(node)) continue;
+        const isOpen = expanded.has(node.path) || (!!q && node.isDir);
+        out.push({ node, depth, expanded: isOpen });
+        if (node.isDir && isOpen) walk(node.children, depth + 1);
+      }
+    };
+    walk(tree, 0);
+    return out;
+  }, [tree, expanded, q, matches]);
 
-  const startDrag = useCallback((e: MouseEvent) => {
+  const fileCount = entries.filter((e) => !e.isDir).length;
+
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [createValue, setCreateValue] = useState("");
+  const createRef = useRef<HTMLInputElement>(null);
+  const renameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menu]);
+
+  useEffect(() => {
+    if (creating) {
+      setCreateValue("");
+      requestAnimationFrame(() => createRef.current?.focus());
+    }
+  }, [creating]);
+
+  useEffect(() => {
+    if (renaming) {
+      requestAnimationFrame(() => { renameRef.current?.focus(); renameRef.current?.select(); });
+    }
+  }, [renaming]);
+
+  const openMenu = (e: React.MouseEvent, path: string, isDir: boolean) => {
     e.preventDefault();
-    draggingRef.current = true;
-    const onMove = (ev: globalThis.MouseEvent) => {
-      if (!draggingRef.current) return;
-      setWidth(Math.min(Math.max(ev.clientX, 160), 600));
-    };
-    const onUp = () => {
-      draggingRef.current = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      setWidth((w) => {
-        saveWidth(w);
-        return w;
-      });
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, []);
+    e.stopPropagation();
+    setMenu({ path, isDir, x: e.clientX, y: e.clientY });
+  };
 
-  const renderNode = (node: Node, depth: number) => {
-    if (!matchesFilter(node)) return null;
-    const isExpanded = expanded.has(node.path) || filter.length > 0;
-    const color = EXT_COLORS[extOf(node.name)] ?? "#8a94a6";
-    return (
-      <div key={node.path}>
-        <div
-          className={`wsp-tree-row ${selectedPath === node.path ? "selected" : ""}`}
-          style={{ paddingLeft: depth * 14 }}
-          onClick={() => (node.isDir ? toggle(node.path) : onSelect(node.path))}
-        >
-          {node.isDir && (
-            <span className="wsp-tree-chevron" style={{ color: "#8a94a6" }}>
-              {isExpanded ? "▾" : "▸"}
-            </span>
-          )}
-          <span className="wsp-tree-icon" style={{ color: node.isDir ? "#8a94a6" : color }}>
-            {node.isDir ? <FolderIcon color="#8a94a6" /> : <FileIcon color={color} />}
-          </span>
-          <span className="wsp-tree-name">{node.name}</span>
-          <span className="wsp-tree-actions">
-            {node.isDir && (
-              <>
-                <button title="New file" onClick={(e) => { e.stopPropagation(); const name = window.prompt("New file name"); if (name) onCreateFile(node.path ? `${node.path}/${name}` : name); }}>+f</button>
-                <button title="New folder" onClick={(e) => { e.stopPropagation(); const name = window.prompt("New folder name"); if (name) onCreateDir(node.path ? `${node.path}/${name}` : name); }}>+d</button>
-              </>
-            )}
-            <button title="Rename" onClick={(e) => { e.stopPropagation(); const name = window.prompt("Rename to", node.name); if (name && name !== node.name) { const parent = node.path.split("/").slice(0, -1).join("/"); onRename(node.path, parent ? `${parent}/${name}` : name); } }}>r</button>
-            <button title="Delete" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete ${node.path}?`)) onDelete(node.path); }}>x</button>
-          </span>
-        </div>
-        {node.isDir && isExpanded && node.children.map((child) => renderNode(child, depth + 1))}
-      </div>
-    );
+  const startRename = (path: string) => {
+    setMenu(null);
+    setRenaming(path);
+    setRenameValue(baseName(path));
+  };
+
+  const commitRename = (path: string) => {
+    const name = renameValue.trim();
+    setRenaming(null);
+    if (!name || name === baseName(path)) return;
+    const parts = path.split("/");
+    parts[parts.length - 1] = name;
+    onRename(path, parts.join("/"));
+  };
+
+  const requestDelete = (path: string, isDir: boolean) => {
+    setMenu(null);
+    if (isDir) return;
+    if (window.confirm(`Delete ${baseName(path)}? This cannot be undone.`)) onDelete(path);
+  };
+
+  const commitCreateRow = () => {
+    const name = createValue.trim();
+    if (!name) { onCancelCreate(); return; }
+    onCommitCreate(name);
   };
 
   return (
-    <div className="wsp-tree" style={{ width }}>
-      <input className="wsp-tree-search" placeholder="Filter files..." value={filter} onChange={(e) => setFilter(e.target.value)} />
-      <div className="wsp-tree-list">{tree.map((node) => renderNode(node, 0))}</div>
-      <div className="wsp-tree-resize" onMouseDown={startDrag} />
-    </div>
+    <aside className="aur-tree">
+      <div className="aur-tree__filter">
+        <div className="aur-tree__filterbox">
+          <Icon name="uil:filter" size={15} />
+          <input placeholder="Filter files…" value={filter} onChange={(e) => onFilter(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="aur-tree__head">
+        <span className="aur-overline">Explorer</span>
+      </div>
+
+      <div className="aur-tree__list">
+        {creating && (
+          <div className="aur-row aur-row--create" style={{ paddingLeft: 10 + (creating === "dir" ? 0 : 22) }}>
+            <Icon
+              className="aur-row__icon"
+              name={creating === "dir" ? "uil:folder" : "uil:file-alt"}
+              size={16}
+              color={creating === "dir" ? "#c7a15a" : "#9aa3b0"}
+            />
+            <input
+              ref={createRef}
+              className="aur-row__input"
+              value={createValue}
+              placeholder={creating === "dir" ? "New folder name" : "New file name"}
+              onChange={(e) => setCreateValue(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onBlur={onCancelCreate}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitCreateRow();
+                if (e.key === "Escape") onCancelCreate();
+              }}
+            />
+          </div>
+        )}
+
+        {rows.map(({ node, depth, expanded: isOpen }) => (
+          <div
+            key={node.path}
+            className={`aur-row${selectedPath === node.path ? " is-selected" : ""}`}
+            style={{ paddingLeft: 10 + depth * 14 + (node.isDir ? 0 : 22) }}
+            onClick={() => (renaming === node.path ? undefined : node.isDir ? onToggle(node.path) : onSelect(node.path))}
+            onContextMenu={(e) => openMenu(e, node.path, node.isDir)}
+          >
+            {node.isDir && (
+              <Icon
+                className="aur-row__chev"
+                name={isOpen ? "uil:angle-down" : "uil:angle-right"}
+                size={15}
+                color="var(--text-light)"
+              />
+            )}
+            <Icon
+              className="aur-row__icon"
+              name={iconFor(node.path, node.isDir, isOpen)}
+              size={16}
+              color={colorFor(node.path, node.isDir)}
+            />
+            {renaming === node.path ? (
+              <input
+                ref={renameRef}
+                className="aur-row__input"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={() => commitRename(node.path)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename(node.path);
+                  if (e.key === "Escape") setRenaming(null);
+                }}
+              />
+            ) : (
+              <span className="aur-row__name">{baseName(node.path)}</span>
+            )}
+            <button
+              className="aur-row__more"
+              onClick={(e) => openMenu(e, node.path, node.isDir)}
+              title="More actions"
+            >
+              <Icon name="uil:ellipsis-v" size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="aur-tree__foot">{fileCount} files</div>
+
+      {menu && (
+        <div className="aur-ctxmenu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => startRename(menu.path)}>
+            <Icon name="uil:edit-alt" size={14} /> Rename
+          </button>
+          <button
+            className="is-danger"
+            disabled={menu.isDir}
+            title={menu.isDir ? "Directory delete isn't supported yet" : undefined}
+            onClick={() => requestDelete(menu.path, menu.isDir)}
+          >
+            <Icon name="uil:trash-alt" size={14} /> Delete
+          </button>
+        </div>
+      )}
+    </aside>
   );
 }
