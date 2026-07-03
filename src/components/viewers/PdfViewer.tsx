@@ -74,7 +74,7 @@ export function PdfViewer({ path, zoom, onPageChange }: PdfViewerProps) {
 
         <div className="aur-pdf__pages" ref={scrollRef} onScroll={onScroll}>
           {Array.from({ length: numPages }, (_, i) => (
-            <div key={i} className="aur-pdf__page" ref={(el) => (pageRefs.current[i] = el)}>
+            <div key={i} className="aur-pdf__page" ref={(el) => { pageRefs.current[i] = el; }}>
               <Page pageNumber={i + 1} width={baseWidth} renderTextLayer={false} renderAnnotationLayer={false} />
             </div>
           ))}
