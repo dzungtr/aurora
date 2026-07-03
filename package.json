@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "bun --hot cli.ts .",
     "test": "bun test",
-    "compile": "bun build ./cli.ts --compile --outfile zui-explorer"
+    "compile": "bun build ./cli.ts --compile --outfile zui-explorer --external fs --external http --external https --external url"
   },
   "dependencies": {
     "@iconify/react": "^5.0.2",

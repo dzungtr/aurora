@@ -3,6 +3,10 @@ import indexHtml from "./index.html";
 import { readdir, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import pdfWorkerPath from "pdfjs-dist/build/pdf.worker.min.mjs" with { type: "file" };
+// pdfjs-dist ships a dead `if (isNodeJS) { await import("fs") ... }` branch for
+// server-side use that Bun's bundler can't tree-shake. `bun run compile` marks
+// fs/http/https/url external (see package.json) so that branch — never reached
+// in the browser, where PDFs load via fetch — doesn't fail the standalone build.
 
 function errorResponse(status: number, message: string) {
   return Response.json({ error: message }, { status });
