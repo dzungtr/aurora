@@ -2,6 +2,7 @@ import { resolveSafe, PathTraversalError } from "./lib/fsSafe";
 import indexHtml from "./index.html";
 import { readdir, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import pdfWorkerPath from "pdfjs-dist/build/pdf.worker.min.mjs" with { type: "file" };
 
 function errorResponse(status: number, message: string) {
   return Response.json({ error: message }, { status });
@@ -22,14 +23,17 @@ async function readJsonBody(req: Request): Promise<any> {
   }
 }
 
-async function listTree(dir: string, base: string): Promise<{ path: string; isDir: boolean }[]> {
+interface TreeNode { path: string; isDir: boolean; size?: number; mtime: number }
+
+async function listTree(dir: string, base: string): Promise<TreeNode[]> {
   const entries = await readdir(dir, { withFileTypes: true });
-  const results: { path: string; isDir: boolean }[] = [];
+  const results: TreeNode[] = [];
   for (const entry of entries) {
     const abs = join(dir, entry.name);
     const rel = base ? `${base}/${entry.name}` : entry.name;
     const isDir = entry.isDirectory();
-    results.push({ path: rel, isDir });
+    const info = await stat(abs);
+    results.push({ path: rel, isDir, size: isDir ? undefined : info.size, mtime: info.mtimeMs });
     if (isDir) {
       results.push(...(await listTree(abs, rel)));
     }
@@ -45,6 +49,11 @@ export function createServer(rootDir: string, port: number) {
     development: process.env.NODE_ENV !== "production",
     routes: {
       "/": indexHtml,
+      "/pdf.worker.min.mjs": {
+        async GET() {
+          return new Response(Bun.file(pdfWorkerPath));
+        },
+      },
       "/api/tree": {
         async GET() {
           try {

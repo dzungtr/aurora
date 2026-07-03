@@ -27,11 +27,25 @@ describe("createServer", () => {
 });
 
 describe("/api/tree", () => {
-  it("lists files under root", async () => {
+  it("lists files under root, including size and mtime", async () => {
     const res = await fetch(`${base}/api/tree`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual([{ path: "hello.txt", isDir: false }]);
+    expect(body).toHaveLength(1);
+    expect(body[0].path).toBe("hello.txt");
+    expect(body[0].isDir).toBe(false);
+    expect(body[0].size).toBe(2); // "hi" is 2 bytes
+    expect(typeof body[0].mtime).toBe("number");
+  });
+
+  it("omits size for directories", async () => {
+    mkdirSync(join(root, "subdir"));
+    const res = await fetch(`${base}/api/tree`);
+    const body = await res.json();
+    const dir = body.find((e: any) => e.path === "subdir");
+    expect(dir.isDir).toBe(true);
+    expect(dir.size).toBeUndefined();
+    expect(typeof dir.mtime).toBe("number");
   });
 });
 
@@ -91,6 +105,20 @@ describe("/api/file", () => {
     const body = await res.json();
     expect(body.error).not.toContain(root);
   });
+
+  it("supports Range requests for streaming (video/audio/PDF scrubbing)", async () => {
+    writeFileSync(join(root, "data.bin"), Buffer.from("0123456789"));
+    const res = await fetch(`${base}/api/file?path=data.bin`, { headers: { Range: "bytes=0-3" } });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("content-range")).toBe("bytes 0-3/10");
+    expect(await res.text()).toBe("0123");
+  });
+
+  it("infers Content-Type from the file extension", async () => {
+    writeFileSync(join(root, "clip.mp4"), Buffer.from("fake"));
+    const res = await fetch(`${base}/api/file?path=clip.mp4`);
+    expect(res.headers.get("content-type")).toBe("video/mp4");
+  });
 });
 
 describe("/api/dir", () => {
@@ -103,6 +131,16 @@ describe("/api/dir", () => {
     expect(res.status).toBe(200);
     const tree = await (await fetch(`${base}/api/tree`)).json();
     expect(tree.some((e: any) => e.path === "newdir" && e.isDir)).toBe(true);
+  });
+});
+
+describe("/pdf.worker.min.mjs", () => {
+  it("serves the pdf.js worker script", async () => {
+    const res = await fetch(`${base}/pdf.worker.min.mjs`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("javascript");
+    const text = await res.text();
+    expect(text.length).toBeGreaterThan(1000);
   });
 });
 
