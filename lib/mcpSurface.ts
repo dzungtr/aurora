@@ -10,7 +10,9 @@ export const MCP_PATH = "/mcp";
  * (and server instance) per request, no session id issued, per the official
  * SDK guidance for serverless/stateless Streamable HTTP.
  */
-export async function handleMcpRequest(req: Request, store: ArtifactStore, baseUrl: string) {
+import { artifactEvent, type LiveBus } from "./liveBus";
+
+export async function handleMcpRequest(req: Request, store: ArtifactStore, baseUrl: string, liveBus?: LiveBus) {
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
@@ -43,13 +45,16 @@ export async function handleMcpRequest(req: Request, store: ArtifactStore, baseU
       },
     },
     async ({ session_id, title, content, artifact_id, session_title }) => {
-      const { artifact, created } = await store.pushMarkdown({
+      const result = await store.pushMarkdown({
         session_id,
         title,
         content,
         artifact_id,
         session_title,
       });
+      // Thin live-update event: clients refetch content over HTTP.
+      liveBus?.broadcast(artifactEvent(result));
+      const { artifact, created } = result;
       const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
       const text = `${created ? "Pushed" : "Replaced"} artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
       return {

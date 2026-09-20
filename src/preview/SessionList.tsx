@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { previewApi, type SessionWithCount, previewUrl } from "./previewApi";
+import { onArtifactEvent } from "./liveSocket";
 import { Icon } from "../components/Icon";
 
 function fmtActivity(iso: string): string {
@@ -23,11 +24,15 @@ export function SessionList() {
 
   useEffect(() => {
     let alive = true;
-    previewApi
-      .listSessions()
-      .then((s) => alive && setSessions(s))
-      .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
-    return () => { alive = false; };
+    const refresh = () =>
+      previewApi
+        .listSessions()
+        .then((s) => alive && setSessions(s))
+        .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
+    refresh();
+    // Live updates: artifact counts / last activity stay fresh without reload.
+    const unsub = onArtifactEvent(() => refresh());
+    return () => { alive = false; unsub(); };
   }, []);
 
   return (
