@@ -3,15 +3,11 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { z } from "zod";
 import type { ArtifactStore, MediaSource, PushResult } from "./artifactStore";
 import { DEFAULT_MEDIA_SIZE_CAP } from "./artifactStore";
+import { artifactEvent, type LiveBus } from "./liveBus";
 import { CHART_TYPES, chartContractError, chartPushSchema } from "./chartContract";
 
 export const MCP_PATH = "/mcp";
 
-/**
- * Handle one request to the MCP endpoint. Stateless mode: a fresh transport
- * (and server instance) per request, no session id issued, per the official
- * SDK guidance for serverless/stateless Streamable HTTP.
- */
 /**
  * Tool-level error: returned as an isError result with an actionable message
  * so the agent can fall back (e.g. write to disk and push by path) instead of
@@ -50,7 +46,8 @@ function registerMediaTool(
   artifactType: "image" | "video",
   store: ArtifactStore,
   baseUrl: string,
-  mediaSizeCap: number
+  mediaSizeCap: number,
+  liveBus?: LiveBus
 ) {
   server.registerTool(
     name,
@@ -71,7 +68,7 @@ function registerMediaTool(
     },
     async ({ session_id, title, source, artifact_id, session_title }) => {
       try {
-        const { artifact, created } = await store.pushMedia({
+        const result = await store.pushMedia({
           session_id,
           title,
           type: artifactType,
@@ -80,6 +77,9 @@ function registerMediaTool(
           session_title,
           size_cap: mediaSizeCap,
         });
+        // Thin live-update event: clients refetch content over HTTP.
+        liveBus?.broadcast(artifactEvent(result));
+        const { artifact, created } = result;
         const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
         const text = `${created ? "Pushed" : "Replaced"} artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
         return {
@@ -98,11 +98,17 @@ function registerMediaTool(
   );
 }
 
+/**
+ * Handle one request to the MCP endpoint. Stateless mode: a fresh transport
+ * (and server instance) per request, no session id issued, per the official
+ * SDK guidance for serverless/stateless Streamable HTTP.
+ */
 export async function handleMcpRequest(
   req: Request,
   store: ArtifactStore,
   baseUrl: string,
-  mediaSizeCap: number = DEFAULT_MEDIA_SIZE_CAP
+  mediaSizeCap: number = DEFAULT_MEDIA_SIZE_CAP,
+  liveBus?: LiveBus
 ) {
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -151,7 +157,10 @@ export async function handleMcpRequest(
           artifact_id?: string;
           session_title?: string;
         };
-        const { artifact, created } = await push(args as any);
+        const result = await push(args as any);
+        // Thin live-update event: clients refetch content over HTTP.
+        liveBus?.broadcast(artifactEvent(result));
+        const { artifact, created } = result;
         const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
         const text = `${created ? "Pushed" : "Replaced"} artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
         return {
@@ -185,8 +194,8 @@ export async function handleMcpRequest(
     (input) => store.pushMermaid(input as any)
   );
 
-  registerMediaTool(server, "push_image", "image", store, baseUrl, mediaSizeCap);
-  registerMediaTool(server, "push_video", "video", store, baseUrl, mediaSizeCap);
+  registerMediaTool(server, "push_image", "image", store, baseUrl, mediaSizeCap, liveBus);
+  registerMediaTool(server, "push_video", "video", store, baseUrl, mediaSizeCap, liveBus);
 
   server.registerTool(
     "push_chart",
@@ -224,7 +233,7 @@ export async function handleMcpRequest(
           content: [{ type: "text" as const, text: contractError }],
         };
       }
-      const { artifact, created } = await store.pushChart({
+      const result = await store.pushChart({
         session_id,
         title,
         chart_type,
@@ -232,6 +241,9 @@ export async function handleMcpRequest(
         artifact_id,
         session_title,
       });
+      // Thin live-update event: clients refetch content over HTTP.
+      liveBus?.broadcast(artifactEvent(result));
+      const { artifact, created } = result;
       const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
       const text = `${created ? "Pushed" : "Replaced"} chart artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
       return {

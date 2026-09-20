@@ -3,6 +3,7 @@ import indexHtml from "./index.html";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { ArtifactStore, InvalidArtifactIdError } from "./lib/artifactStore";
+import { LiveBus } from "./lib/liveBus";
 import { handleMcpRequest } from "./lib/mcpSurface";
 import { readdir, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -60,6 +61,7 @@ export interface ServerOptions {
 export function createServer(rootDir: string, port: number, options: ServerOptions = {}) {
   const root = resolve(rootDir);
   const artifactStore = new ArtifactStore(options.artifactsDir ?? join(homedir(), ".local/share/aurora/artifacts"));
+  const liveBus = new LiveBus();
   const externalPort = process.env.AURORA_PUBLIC_PORT ? Number(process.env.AURORA_PUBLIC_PORT) : port;
   return Bun.serve({
     port,
@@ -80,7 +82,7 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
       "/mcp": {
         async POST(req) {
           try {
-            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`, options.mediaSizeCap);
+            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`, options.mediaSizeCap, liveBus);
           } catch (err) {
             console.error(err);
             return errorResponse(500, "MCP handler error");
@@ -274,6 +276,15 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
           }
         },
       },
+    },
+    websocket: liveBus.websocket,
+    fetch(req, server) {
+      if (new URL(req.url).pathname === "/ws") {
+        // Thin live-update channel; clients refetch artifact content over HTTP.
+        server.upgrade(req);
+        return;
+      }
+      return errorResponse(404, "Not found");
     },
     error(err) {
       console.error(err);

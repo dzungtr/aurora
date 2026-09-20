@@ -11,6 +11,7 @@ import { Viewer } from "./components/viewers/Viewer";
 import { Icon } from "./components/Icon";
 import { PreviewApp } from "./preview/PreviewApp";
 import { parsePreviewPath, onRouteChange } from "./preview/previewApi";
+import { startLiveSocket } from "./preview/liveSocket";
 
 export type Layout = "workspace" | "focus";
 
@@ -52,6 +53,8 @@ function useRoutePath(): string {
 
 export function App() {
   const path = useRoutePath();
+  // One live-update WebSocket for the whole SPA; survives route changes.
+  useEffect(() => startLiveSocket(), []);
   const isPreview = parsePreviewPath(path) !== null;
   if (isPreview) return <PreviewApp key={path} />;
   return <ExplorerApp />;

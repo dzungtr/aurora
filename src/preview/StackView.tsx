@@ -2,8 +2,9 @@
 // slide-rail navigation (prev/next buttons + a strip of the session's
 // artifacts). Missing artifact id resolves to the latest (highest seq).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { previewApi, latestOf, previewUrl, navigate, onRouteChange, type Artifact, type ArtifactMeta } from "./previewApi";
+import { onArtifactEvent } from "./liveSocket";
 import { MarkdownArtifact } from "./MarkdownArtifact";
 import { ChartView, parseChartContract, type ChartContract } from "./ChartView";
 import { MediaArtifact } from "./MediaArtifact";
@@ -29,6 +30,8 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
   const [artifacts, setArtifacts] = useState<ArtifactMeta[] | null>(null);
   const [current, setCurrent] = useState<Artifact | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const aliveRef = useRef(true);
+  useEffect(() => () => { aliveRef.current = false; }, []);
 
   // Resolve the effective artifact id: deep-link id, else latest.
   const effectiveId = useMemo(() => artifactId ?? latestOf(artifacts ?? [])?.artifact_id, [artifactId, artifacts]);
@@ -62,6 +65,39 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
   // Re-render on popstate / in-app navigate so prev/next stay in sync.
   const [, setTick] = useState(0);
   useEffect(() => onRouteChange(() => setTick((t) => t + 1)), []);
+
+  // Live updates: a push to this session slides onto the stack and the view
+  // auto-advances; an in-place replace refreshes the open artifact in place.
+  useEffect(() => {
+    return onArtifactEvent((evt) => {
+      if (evt.session_id !== sessionId) return;
+      if (evt.event === "pushed") {
+        previewApi
+          .listArtifacts(sessionId)
+          .then((list) => {
+            if (!aliveRef.current) return;
+            setArtifacts(list);
+            const latest = latestOf(list);
+            if (latest) navigate(previewUrl(sessionId, latest.artifact_id));
+          })
+          .catch(() => {});
+      } else {
+        // "updated": refresh the stack (meta may have changed) and, when the
+        // open artifact is the replaced one, refetch its content in place.
+        previewApi
+          .listArtifacts(sessionId)
+          .then((list) => aliveRef.current && setArtifacts(list))
+          .catch(() => {});
+        if (!current || evt.artifact_id === current.artifact_id) {
+          const id = evt.artifact_id;
+          previewApi
+            .getArtifact(sessionId, id)
+            .then((a) => aliveRef.current && setCurrent(a))
+            .catch(() => {});
+        }
+      }
+    });
+  }, [sessionId, current]);
 
   return (
     <div className="aur-preview">
