@@ -1,0 +1,16 @@
+{
+  "colors": ["#7aa2f7", "#9ece6a", "#f7768e", "#e0af68", "#bb9af7", "#2ac3de", "#ff9e64", "#73daca"],
+  "backgroundColor": "transparent",
+  "textStyle": { "color": "#a9b1d6", "fontFamily": "Inter, system-ui, sans-serif", "fontSize": 13 },
+  "title": { "show": false },
+  "legend": { "top": 0, "itemWidth": 10, "itemHeight": 10, "textStyle": { "color": "#a9b1d6", "fontSize": 12 } },
+  "grid": { "left": 16, "right": 16, "top": 40, "bottom": 8, "containLabel": true },
+  "axis": {
+    "lineColor": "#3b4261",
+    "labelColor": "#a9b1d6",
+    "splitLineColor": "#24283b"
+  },
+  "bar": { "borderRadius": 3, "barMaxWidth": 40 },
+  "line": { "width": 2, "pointSize": 6 },
+  "pie": { "radius": "62%", "center": ["50%", "55%"] }
+}

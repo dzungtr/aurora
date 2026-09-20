@@ -426,6 +426,13 @@
 .aur-artifact-md hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .aur-artifact-md pre.md-pre { background: var(--e1); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow: auto; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; color: var(--text-body); margin: 12px 0; }
 
+/* Chart artifacts: ECharts canvas fills the stage */
+.aur-chart {
+  width: 100%;
+  min-height: 420px;
+  height: 100%;
+}
+
 /* --- T6: media artifacts + session delete --- */
 .aur-media { display: flex; align-items: center; justify-content: center; padding: 18px; min-height: 200px; }
 .aur-media__media { max-width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }

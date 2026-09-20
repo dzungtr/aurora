@@ -233,6 +233,99 @@ describe("MCP endpoint /mcp", () => {
     await b.client.close();
   });
 
+  it("pushes a chart end-to-end: contract on disk, deep link returned", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const res = await client.callTool({
+      name: "push_chart",
+      arguments: {
+        session_id: "chart-sess",
+        title: "Quarterly",
+        chart_type: "bar",
+        data: { kind: "categorical", categories: ["Q1", "Q2"], series: [{ name: "rev", values: [10, 20] }] },
+      },
+    });
+    expect(res.isError).toBeFalsy();
+    const structured = res.structuredContent as any;
+    expect(structured.deep_link).toBe(`${BASE}/preview/chart-sess`);
+    expect(structured.created).toBe(true);
+
+    const got = await (
+      await fetch(`${BASE}/api/preview/sessions/chart-sess/artifacts/${structured.artifact_id}`)
+    ).json();
+    expect(got.meta.type).toBe("chart");
+    expect(JSON.parse(got.content)).toEqual({
+      chart_type: "bar",
+      data: { kind: "categorical", categories: ["Q1", "Q2"], series: [{ name: "rev", values: [10, 20] }] },
+    });
+    await client.close();
+  });
+
+  it("push_chart replaces in place with the same artifact_id", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const first = await client.callTool({
+      name: "push_chart",
+      arguments: {
+        session_id: "chart-repl",
+        title: "v1",
+        chart_type: "pie",
+        data: { kind: "pie", points: [{ label: "a", value: 1 }] },
+        artifact_id: "fixed-chart",
+      },
+    });
+    const second = await client.callTool({
+      name: "push_chart",
+      arguments: {
+        session_id: "chart-repl",
+        title: "v2",
+        chart_type: "pie",
+        data: { kind: "pie", points: [{ label: "a", value: 2 }] },
+        artifact_id: "fixed-chart",
+      },
+    });
+    expect((second.structuredContent as any).created).toBe(false);
+    expect((second.structuredContent as any).artifact_id).toBe("fixed-chart");
+    const sessions = await (await fetch(`${BASE}/api/preview/sessions`)).json();
+    expect(sessions.find((s: any) => s.session_id === "chart-repl").artifact_count).toBe(1);
+    await client.close();
+  });
+
+  it("rejects chart data whose kind mismatches chart_type with an actionable error", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const res = await client.callTool({
+      name: "push_chart",
+      arguments: {
+        session_id: "chart-bad",
+        title: "bad",
+        chart_type: "bar",
+        data: { kind: "pie", points: [{ label: "a", value: 1 }] },
+      },
+    });
+    expect(res.isError).toBe(true);
+    expect(JSON.stringify(res.content)).toContain("categorical");
+    // nothing written to disk
+    expect(existsSync(join(artifactsDir, "sessions", "chart-bad"))).toBe(false);
+    await client.close();
+  });
+
+  it("rejects raw chart-lib specs (missing kind discriminator)", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const res = await client.callTool({
+      name: "push_chart",
+      arguments: {
+        session_id: "chart-raw",
+        title: "raw",
+        chart_type: "line",
+        data: { xAxis: { type: "category", data: ["a"] }, series: [{ type: "line" }] },
+      },
+    });
+    expect(res.isError).toBe(true);
+    await client.close();
+  });
+
   it("persists artifacts across a server restart", async () => {
     const { client, transport } = makeClient();
     await client.connect(transport);
