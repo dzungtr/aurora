@@ -1,0 +1,3 @@
+# Artifacts are immutable snapshots on local disk, never live references
+
+Every artifact push — including media — copies its bytes into aurora's own store (`~/.local/share/aurora/artifacts/`) at receipt time. A pushed `path`, `base64`, or remote `url` is fetched and snapshotted server-side; the original source may disappear without breaking the artifact. The trade-off is disk duplication vs. dangling references and TOCTOU drift; we chose duplication because localhost disk is cheap and agent temp files are short-lived. There is no TTL — deletion is an explicit human action. Sessions and artifacts survive server restarts by construction (plain files + meta JSON, atomic writes).
