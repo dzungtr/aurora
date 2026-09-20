@@ -9,6 +9,8 @@ import { Toolbar } from "./components/Toolbar";
 import { Inspector } from "./components/Inspector";
 import { Viewer } from "./components/viewers/Viewer";
 import { Icon } from "./components/Icon";
+import { PreviewApp } from "./preview/PreviewApp";
+import { parsePreviewPath, onRouteChange } from "./preview/previewApi";
 
 export type Layout = "workspace" | "focus";
 
@@ -41,7 +43,21 @@ function loadExpanded(): Set<string> {
   } catch { return new Set(); }
 }
 
+/** Client-side route: re-parsed on popstate and in-app navigate. */
+function useRoutePath(): string {
+  const [path, setPath] = useState(() => window.location.pathname);
+  useEffect(() => onRouteChange(() => setPath(window.location.pathname)), []);
+  return path;
+}
+
 export function App() {
+  const path = useRoutePath();
+  const isPreview = parsePreviewPath(path) !== null;
+  if (isPreview) return <PreviewApp key={path} />;
+  return <ExplorerApp />;
+}
+
+function ExplorerApp() {
   const [entries, setEntries] = useState<TreeEntry[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [openTabs, setOpenTabs] = useState<string[]>([]);

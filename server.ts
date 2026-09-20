@@ -65,6 +65,11 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
     development: process.env.NODE_ENV !== "production",
     routes: {
       "/": indexHtml,
+      // SPA deep links for the preview surface: serve the app shell and let the
+      // client router resolve the session/artifact.
+      "/preview": indexHtml,
+      "/preview/:sid": indexHtml,
+      "/preview/:sid/:aid": indexHtml,
       "/pdf.worker.min.mjs": {
         async GET() {
           return new Response(Bun.file(pdfWorkerPath));
@@ -93,6 +98,18 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
             const artifact = await artifactStore.getArtifact(sid, aid);
             if (!artifact) return errorResponse(404, "Not found");
             return Response.json({ session_id: sid, ...artifact });
+          } catch (err) {
+            return handleError(err);
+          }
+        },
+      },
+      "/api/preview/sessions/:sid/artifacts": {
+        async GET(req) {
+          const { sid } = (req as any).params ?? {};
+          try {
+            const session = await artifactStore.getSession(sid);
+            if (!session) return errorResponse(404, "Not found");
+            return Response.json(await artifactStore.listArtifacts(sid));
           } catch (err) {
             return handleError(err);
           }
