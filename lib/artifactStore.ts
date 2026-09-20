@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir } from "node:fs/promises";
+import type { ChartData, ChartType } from "./chartContract";
 import { writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -31,6 +32,15 @@ export interface PushMarkdownInput {
   session_id: string;
   title: string;
   content: string;
+  artifact_id?: string;
+  session_title?: string;
+}
+
+export interface PushChartInput {
+  session_id: string;
+  title: string;
+  chart_type: ChartType;
+  data: ChartData;
   artifact_id?: string;
   session_title?: string;
 }
@@ -116,9 +126,12 @@ export class ArtifactStore {
   ): Promise<{ meta: ArtifactMeta; content: string } | null> {
     const meta = await this.getArtifactMeta(sessionId, artifactId);
     if (!meta) return null;
+    // content file name follows the artifact type (markdown → content.md,
+    // chart → content.json); unknown types fall back to content.md
+    const file = meta.type === "chart" ? "content.json" : "content.md";
     let content = "";
     try {
-      content = await readFile(join(artifactDir(this.baseDir, sessionId, artifactId), "content.md"), "utf-8");
+      content = await readFile(join(artifactDir(this.baseDir, sessionId, artifactId), file), "utf-8");
     } catch {
       // keep empty content rather than dropping the meta
     }
@@ -150,6 +163,32 @@ export class ArtifactStore {
    * in place (created_at preserved, updated_at bumped).
    */
   async pushMarkdown(input: PushMarkdownInput): Promise<PushResult> {
+    return this.push({ ...input, type: "markdown", content: input.content });
+  }
+
+  /**
+   * Push a chart artifact. Same session/replace semantics as pushMarkdown;
+   * the chart contract ({chart_type, data}) is stored as JSON.
+   */
+  async pushChart(input: PushChartInput): Promise<PushResult> {
+    return this.push({
+      session_id: input.session_id,
+      title: input.title,
+      artifact_id: input.artifact_id,
+      session_title: input.session_title,
+      type: "chart",
+      content: JSON.stringify({ chart_type: input.chart_type, data: input.data }),
+    });
+  }
+
+  private async push(input: {
+    session_id: string;
+    title: string;
+    type: string;
+    content: string;
+    artifact_id?: string;
+    session_title?: string;
+  }): Promise<PushResult> {
     validateId(input.session_id);
     if (input.artifact_id !== undefined) validateId(input.artifact_id);
 
@@ -179,7 +218,7 @@ export class ArtifactStore {
       ?? Math.max(0, ...(await this.listArtifacts(input.session_id)).map((a) => a.seq)) + 1;
     const artifact: ArtifactMeta = {
       artifact_id: artifactId,
-      type: "markdown",
+      type: input.type,
       seq,
       title: input.title,
       created_at: existing?.created_at ?? now,
@@ -188,7 +227,7 @@ export class ArtifactStore {
 
     await mkdir(dir, { recursive: true });
     atomicWriteFileSync(join(dir, "meta.json"), JSON.stringify(artifact, null, 2));
-    atomicWriteFileSync(join(dir, "content.md"), input.content);
+    atomicWriteFileSync(join(dir, input.type === "chart" ? "content.json" : "content.md"), input.content);
 
     session = { ...session, last_activity: now };
     atomicWriteFileSync(join(sDir, "meta.json"), JSON.stringify(session, null, 2));

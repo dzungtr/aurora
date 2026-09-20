@@ -425,3 +425,10 @@
 .aur-artifact-md blockquote { border-left: 3px solid var(--primary); margin: 10px 0; padding: 2px 14px; color: var(--text-light); }
 .aur-artifact-md hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .aur-artifact-md pre.md-pre { background: var(--e1); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow: auto; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; color: var(--text-body); margin: 12px 0; }
+
+/* Chart artifacts: ECharts canvas fills the stage */
+.aur-chart {
+  width: 100%;
+  min-height: 420px;
+  height: 100%;
+}

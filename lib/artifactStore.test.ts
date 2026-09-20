@@ -157,3 +157,61 @@ describe("ArtifactStore.pushMarkdown seq assignment", () => {
     expect(seqs).toEqual([2, 3]);
   });
 });
+
+describe("ArtifactStore.pushChart", () => {
+  const pieData = { kind: "pie" as const, points: [{ label: "a", value: 1 }, { label: "b", value: 3 }] };
+
+  it("stores a chart artifact as content.json with the contract, creating the session", async () => {
+    const { session, artifact, created } = await store.pushChart({
+      session_id: "chart-s",
+      title: "Split",
+      chart_type: "pie",
+      data: pieData,
+    });
+    expect(created).toBe(true);
+    expect(session.title).toBe("chart-s");
+    expect(artifact.type).toBe("chart");
+    const dir = artifactDir(baseDir, "chart-s", artifact.artifact_id);
+    expect(existsSync(join(dir, "content.json"))).toBe(true);
+    expect(JSON.parse(readFileSync(join(dir, "content.json"), "utf-8"))).toEqual({
+      chart_type: "pie",
+      data: pieData,
+    });
+  });
+
+  it("getArtifact reads chart contracts back from content.json", async () => {
+    const { artifact } = await store.pushChart({
+      session_id: "chart-r",
+      title: "T",
+      chart_type: "pie",
+      data: pieData,
+    });
+    const got = await store.getArtifact("chart-r", artifact.artifact_id);
+    expect(JSON.parse(got!.content).chart_type).toBe("pie");
+  });
+
+  it("appends by default and replaces in place with artifact_id", async () => {
+    const first = await store.pushChart({
+      session_id: "chart-x",
+      title: "v1",
+      chart_type: "pie",
+      data: pieData,
+      artifact_id: "one",
+    });
+    const second = await store.pushChart({
+      session_id: "chart-x",
+      title: "v2",
+      chart_type: "pie",
+      data: { kind: "pie", points: [{ label: "a", value: 9 }] },
+      artifact_id: "one",
+    });
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.artifact.created_at).toBe(first.artifact.created_at);
+    const list = await store.listArtifacts("chart-x");
+    expect(list.length).toBe(1);
+    const got = await store.getArtifact("chart-x", "one");
+    expect(JSON.parse(got!.content).data.points[0].value).toBe(9);
+    expect(got!.meta.title).toBe("v2");
+  });
+});

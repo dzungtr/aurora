@@ -5,12 +5,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewApi, latestOf, previewUrl, navigate, onRouteChange, type Artifact, type ArtifactMeta } from "./previewApi";
 import { MarkdownArtifact } from "./MarkdownArtifact";
+import { ChartView, parseChartContract, type ChartContract } from "./ChartView";
 import { Icon } from "../components/Icon";
 
 export interface StackViewProps {
   sessionId: string;
   /** artifact id from the deep link; undefined → latest */
   artifactId?: string;
+}
+
+/** Parse a chart contract, or null when the payload isn't a valid chart. */
+function parseChartSafe(content: string): ChartContract | null {
+  try {
+    return parseChartContract(content);
+  } catch {
+    return null;
+  }
 }
 
 export function StackView({ sessionId, artifactId }: StackViewProps) {
@@ -41,6 +51,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
   }, [sessionId, effectiveId]);
 
   const index = current ? artifacts?.findIndex((a) => a.artifact_id === current.artifact_id) ?? -1 : -1;
+  const chart = current?.type === "chart" ? parseChartSafe(current.content) : null;
   const go = (delta: number) => {
     if (!artifacts || index < 0) return;
     const next = artifacts[index + delta];
@@ -69,7 +80,15 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
         {current && (
           <>
             <div className="aur-stack__stage">
-              <MarkdownArtifact content={current.content} />
+              {current.type === "chart" ? (
+                chart ? (
+                  <ChartView contract={chart} />
+                ) : (
+                  <p className="aur-preview__error">Invalid chart artifact — malformed contract JSON.</p>
+                )
+              ) : (
+                <MarkdownArtifact content={current.content} />
+              )}
             </div>
             <nav className="aur-stack__rail" aria-label="Artifact stack">
               <button
