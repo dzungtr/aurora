@@ -34,6 +34,8 @@ export interface PushMarkdownInput {
   content: string;
   artifact_id?: string;
   session_title?: string;
+  /** artifact kind, defaults to "markdown"; set to "mermaid" by pushMermaid */
+  type?: string;
 }
 
 export interface PushChartInput {
@@ -163,7 +165,18 @@ export class ArtifactStore {
    * in place (created_at preserved, updated_at bumped).
    */
   async pushMarkdown(input: PushMarkdownInput): Promise<PushResult> {
-    return this.push({ ...input, type: "markdown", content: input.content });
+    return this.pushArtifact(input);
+  }
+
+  /** Push a mermaid diagram artifact (same session/replace semantics as markdown). */
+  async pushMermaid(input: {
+    session_id: string;
+    title: string;
+    code: string;
+    artifact_id?: string;
+    session_title?: string;
+  }): Promise<PushResult> {
+    return this.pushArtifact({ ...input, content: input.code, type: "mermaid" });
   }
 
   /**
@@ -171,7 +184,7 @@ export class ArtifactStore {
    * the chart contract ({chart_type, data}) is stored as JSON.
    */
   async pushChart(input: PushChartInput): Promise<PushResult> {
-    return this.push({
+    return this.pushArtifact({
       session_id: input.session_id,
       title: input.title,
       artifact_id: input.artifact_id,
@@ -181,14 +194,7 @@ export class ArtifactStore {
     });
   }
 
-  private async push(input: {
-    session_id: string;
-    title: string;
-    type: string;
-    content: string;
-    artifact_id?: string;
-    session_title?: string;
-  }): Promise<PushResult> {
+  private async pushArtifact(input: PushMarkdownInput): Promise<PushResult> {
     validateId(input.session_id);
     if (input.artifact_id !== undefined) validateId(input.artifact_id);
 
@@ -218,7 +224,7 @@ export class ArtifactStore {
       ?? Math.max(0, ...(await this.listArtifacts(input.session_id)).map((a) => a.seq)) + 1;
     const artifact: ArtifactMeta = {
       artifact_id: artifactId,
-      type: input.type,
+      type: input.type ?? "markdown",
       seq,
       title: input.title,
       created_at: existing?.created_at ?? now,

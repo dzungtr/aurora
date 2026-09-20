@@ -85,6 +85,79 @@ describe("MCP endpoint /mcp", () => {
     await client.close();
   });
 
+  it("lists push_mermaid", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name)).toContain("push_mermaid");
+    await client.close();
+  });
+
+  it("push_mermaid: pushes a diagram end-to-end, stores type mermaid, deep link works", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const res = await client.callTool({
+      name: "push_mermaid",
+      arguments: {
+        session_id: "diag-agent",
+        title: "Login flow",
+        code: "flowchart TD\n  A[Login] --> B{Valid?} --> C[Dashboard]",
+        session_title: "Diagrams",
+      },
+    });
+    expect(res.isError).toBeUndefined();
+    const structured = res.structuredContent as any;
+    expect(structured.created).toBe(true);
+    expect(structured.deep_link).toBe(`${BASE}/preview/diag-agent`);
+    const fetched = await (
+      await fetch(`${BASE}/api/preview/sessions/diag-agent/artifacts/${structured.artifact_id}`)
+    ).json();
+    expect(fetched.meta.type).toBe("mermaid");
+    expect(fetched.content).toContain("flowchart TD");
+    const session = (await (await fetch(`${BASE}/api/preview/sessions`)).json()).find((s: any) => s.session_id === "diag-agent");
+    expect(session.title).toBe("Diagrams");
+    await client.close();
+  });
+
+  it("push_mermaid: replaces in place via artifact_id", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const first = await client.callTool({
+      name: "push_mermaid",
+      arguments: { session_id: "diag-replace", title: "v1", code: "flowchart TD\n  A --> B" },
+    });
+    const aid = (first.structuredContent as any).artifact_id;
+    const second = await client.callTool({
+      name: "push_mermaid",
+      arguments: { session_id: "diag-replace", title: "v2", code: "flowchart TD\n  A --> C", artifact_id: aid },
+    });
+    expect((second.structuredContent as any).created).toBe(false);
+    expect((second.structuredContent as any).artifact_id).toBe(aid);
+    const count = (await (await fetch(`${BASE}/api/preview/sessions`)).json()).find((s: any) => s.session_id === "diag-replace").artifact_count;
+    expect(count).toBe(1);
+    const got = await (await fetch(`${BASE}/api/preview/sessions/diag-replace/artifacts/${aid}`)).json();
+    expect(got.meta.title).toBe("v2");
+    expect(got.content).toContain("A --> C");
+    await client.close();
+  });
+
+  it("push_mermaid: rejects missing code and unsafe session ids", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const missing = await client.callTool({
+      name: "push_mermaid",
+      arguments: { session_id: "diag-agent", title: "no code" },
+    });
+    expect(missing.isError).toBe(true);
+    const traversal = await client.callTool({
+      name: "push_mermaid",
+      arguments: { session_id: "../escape", title: "x", code: "flowchart TD" },
+    });
+    expect(traversal.isError).toBe(true);
+    expect(existsSync(join(artifactsDir, "sessions", "escape"))).toBe(false);
+    await client.close();
+  });
+
   it("rejects invalid tool input via schema validation", async () => {
     const { client, transport } = makeClient();
     await client.connect(transport);
