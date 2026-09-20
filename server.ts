@@ -1,7 +1,11 @@
 import { resolveSafe, PathTraversalError } from "./lib/fsSafe";
 import indexHtml from "./index.html";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import { ArtifactStore, InvalidArtifactIdError } from "./lib/artifactStore";
+import { handleMcpRequest } from "./lib/mcpSurface";
 import { readdir, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import pdfWorkerPath from "pdfjs-dist/build/pdf.worker.min.mjs" with { type: "file" };
 // pdfjs-dist ships a dead `if (isNodeJS) { await import("fs") ... }` branch for
 // server-side use that Bun's bundler can't tree-shake. `bun run compile` marks
@@ -14,6 +18,7 @@ function errorResponse(status: number, message: string) {
 
 function handleError(err: unknown) {
   if (err instanceof PathTraversalError) return errorResponse(400, "Invalid path");
+  if (err instanceof InvalidArtifactIdError) return errorResponse(404, "Not found");
   if ((err as any)?.code === "ENOENT") return errorResponse(404, "Not found");
   console.error(err);
   return errorResponse(500, "Internal server error");
@@ -45,8 +50,15 @@ async function listTree(dir: string, base: string): Promise<TreeNode[]> {
   return results;
 }
 
-export function createServer(rootDir: string, port: number) {
+export interface ServerOptions {
+  /** Base directory for artifact storage (default ~/.local/share/aurora/artifacts) */
+  artifactsDir?: string;
+}
+
+export function createServer(rootDir: string, port: number, options: ServerOptions = {}) {
   const root = resolve(rootDir);
+  const artifactStore = new ArtifactStore(options.artifactsDir ?? join(homedir(), ".local/share/aurora/artifacts"));
+  const externalPort = process.env.AURORA_PUBLIC_PORT ? Number(process.env.AURORA_PUBLIC_PORT) : port;
   return Bun.serve({
     port,
     hostname: "127.0.0.1",
@@ -56,6 +68,50 @@ export function createServer(rootDir: string, port: number) {
       "/pdf.worker.min.mjs": {
         async GET() {
           return new Response(Bun.file(pdfWorkerPath));
+        },
+      },
+      "/mcp": {
+        async POST(req) {
+          try {
+            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`);
+          } catch (err) {
+            console.error(err);
+            return errorResponse(500, "MCP handler error");
+          }
+        },
+        async GET() {
+          return errorResponse(405, "SSE streaming not supported in stateless mode");
+        },
+        async DELETE() {
+          return errorResponse(405, "No sessions in stateless mode");
+        },
+      },
+      "/api/preview/sessions/:sid/artifacts/:aid": {
+        async GET(req) {
+          const { sid, aid } = (req as any).params ?? {};
+          try {
+            const artifact = await artifactStore.getArtifact(sid, aid);
+            if (!artifact) return errorResponse(404, "Not found");
+            return Response.json({ session_id: sid, ...artifact });
+          } catch (err) {
+            return handleError(err);
+          }
+        },
+      },
+      "/api/preview/sessions": {
+        async GET() {
+          try {
+            const sessions = await artifactStore.listSessions();
+            const withCounts = await Promise.all(
+              sessions.map(async (s) => ({
+                ...s,
+                artifact_count: (await artifactStore.listArtifacts(s.session_id)).length,
+              }))
+            );
+            return Response.json(withCounts);
+          } catch (err) {
+            return handleError(err);
+          }
         },
       },
       "/api/tree": {
