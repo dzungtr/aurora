@@ -425,3 +425,23 @@
 .aur-artifact-md blockquote { border-left: 3px solid var(--primary); margin: 10px 0; padding: 2px 14px; color: var(--text-light); }
 .aur-artifact-md hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .aur-artifact-md pre.md-pre { background: var(--e1); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow: auto; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; color: var(--text-body); margin: 12px 0; }
+
+/* Mermaid artifact view (dark theme from mermaid.initialize; layout only here) */
+.aur-mermaid { max-width: 900px; width: 100%; display: flex; justify-content: center; }
+.aur-mermaid__svg { width: 100%; overflow: auto; }
+.aur-mermaid__svg svg { max-width: 100%; height: auto; }
+.aur-mermaid__loading { color: var(--text-light); font-size: 13px; }
+.aur-mermaid__holder { position: absolute; width: 0; height: 0; overflow: hidden; }
+.aur-mermaid--error { display: block; max-width: 760px; }
+.aur-mermaid__error-title { color: #ff8a80; font-weight: 700; font-size: 14px; margin: 0 0 8px; }
+.aur-mermaid__error-detail {
+  background: var(--e1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; color: var(--text-body); font-size: 12.5px;
+  font-family: ui-monospace, monospace; overflow: auto; margin: 0 0 12px; white-space: pre-wrap;
+}
+.aur-mermaid__error-source-label { color: var(--text-light); font-size: 12px; margin: 0 0 4px; }
+.aur-mermaid__error-source {
+  background: var(--e1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; color: var(--text-body); font-size: 12.5px;
+  font-family: ui-monospace, monospace; overflow: auto; margin: 0; white-space: pre-wrap;
+}
