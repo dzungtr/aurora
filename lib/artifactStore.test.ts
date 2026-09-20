@@ -213,6 +213,9 @@ describe("ArtifactStore.pushChart", () => {
     const got = await store.getArtifact("chart-x", "one");
     expect(JSON.parse(got!.content).data.points[0].value).toBe(9);
     expect(got!.meta.title).toBe("v2");
+  });
+});
+
 describe("ArtifactStore.pushMedia", () => {
   const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03]);
 
