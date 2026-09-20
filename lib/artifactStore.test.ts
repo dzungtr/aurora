@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -213,6 +213,160 @@ describe("ArtifactStore.pushChart", () => {
     const got = await store.getArtifact("chart-x", "one");
     expect(JSON.parse(got!.content).data.points[0].value).toBe(9);
     expect(got!.meta.title).toBe("v2");
+describe("ArtifactStore.pushMedia", () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03]);
+
+  it("snapshots from a local absolute path; source file can be deleted afterward", async () => {
+    const src = join(baseDir, "tmp-src.png");
+    writeFileSync(src, PNG);
+    const { artifact } = await store.pushMedia({
+      session_id: "s",
+      title: "Shot",
+      type: "image",
+      source: { path: src },
+    });
+    rmSync(src);
+    expect(artifact.type).toBe("image");
+    expect(artifact.mime).toBe("image/png");
+    expect(artifact.size).toBe(PNG.byteLength);
+    const blob = readFileSync(join(artifactDir(baseDir, "s", artifact.artifact_id), "blob"));
+    expect(blob).toEqual(PNG);
+  });
+
+  it("rejects relative path sources", async () => {
+    expect(
+      store.pushMedia({ session_id: "s", title: "t", type: "image", source: { path: "rel.png" } })
+    ).rejects.toMatchObject({ name: "MediaSourceError" });
+  });
+
+  it("rejects path sources that do not exist", async () => {
+    expect(
+      store.pushMedia({
+        session_id: "s",
+        title: "t",
+        type: "video",
+        source: { path: join(baseDir, "nope.mp4") },
+      })
+    ).rejects.toMatchObject({ name: "MediaSourceError" });
+  });
+
+  it("snapshots base64 sources with their declared mime", async () => {
+    const { artifact } = await store.pushMedia({
+      session_id: "s",
+      title: "Inline",
+      type: "video",
+      source: { base64: PNG.toString("base64"), mime: "video/mp4" },
+    });
+    expect(artifact.mime).toBe("video/mp4");
+    expect(artifact.size).toBe(PNG.byteLength);
+  });
+
+  it("snapshots url sources via server-side fetch", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(PNG, { status: 200, headers: { "content-type": "image/png" } })) as unknown as typeof fetch;
+    try {
+      const { artifact } = await store.pushMedia({
+        session_id: "s",
+        title: "Remote",
+        type: "image",
+        source: { url: "https://example.com/pic.png" },
+      });
+      expect(artifact.mime).toBe("image/png");
+      expect(artifact.size).toBe(PNG.byteLength);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("rejects oversized base64 with an actionable cap error", async () => {
+    const err = await store
+      .pushMedia({
+        session_id: "s",
+        title: "t",
+        type: "image",
+        source: { base64: PNG.toString("base64"), mime: "image/png" },
+        size_cap: 4,
+      })
+      .catch((e) => e);
+    expect(err.name).toBe("MediaSizeCapError");
+    expect(err.message).toContain("path");
+  });
+
+  it("rejects oversized url sources before downloading when content-length over cap", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(new Uint8Array(0), {
+        status: 200,
+        headers: { "content-length": String(PNG.byteLength) },
+      })) as unknown as typeof fetch;
+    try {
+      await expect(
+        store.pushMedia({
+          session_id: "s",
+          title: "t",
+          type: "video",
+          source: { url: "https://example.com/big.mp4" },
+          size_cap: 4,
+        })
+      ).rejects.toMatchObject({ name: "MediaSizeCapError" });
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("replaces in place via artifact_id and appends without it", async () => {
+    const a = await store.pushMedia({
+      session_id: "s",
+      title: "v1",
+      type: "image",
+      source: { base64: PNG.toString("base64"), mime: "image/png" },
+      artifact_id: "pic",
+    });
+    const b = await store.pushMedia({
+      session_id: "s",
+      title: "v2",
+      type: "image",
+      source: { base64: Buffer.from([9, 9]).toString("base64"), mime: "image/png" },
+      artifact_id: "pic",
+    });
+    expect(a.created).toBe(true);
+    expect(b.created).toBe(false);
+    expect((await store.listArtifacts("s")).length).toBe(1);
+  });
+
+  it("keeps sessions isolated", async () => {
+    await store.pushMedia({
+      session_id: "s1",
+      title: "a",
+      type: "image",
+      source: { base64: PNG.toString("base64"), mime: "image/png" },
+    });
+    const aid = (await store.listArtifacts("s1"))[0].artifact_id;
+    expect(await store.getArtifactMeta("s2", aid)).toBeNull();
+  });
+});
+
+describe("ArtifactStore.deleteSession", () => {
+  it("removes the session directory and all artifacts from disk", async () => {
+    await store.pushMarkdown({ session_id: "gone", title: "t", content: "c" });
+    const aid = (await store.listArtifacts("gone"))[0].artifact_id;
+    expect(await store.deleteSession("gone")).toBe(true);
+    expect(existsSync(sessionDir(baseDir, "gone"))).toBe(false);
+    expect(await store.getSession("gone")).toBeNull();
+    expect(await store.getArtifactMeta("gone", aid)).toBeNull();
+    expect(await store.listSessions().then((s) => s.some((x) => x.session_id === "gone"))).toBe(false);
+  });
+
+  it("returns false for an unknown session without touching disk", async () => {
+    expect(await store.deleteSession("nope")).toBe(false);
+  });
+
+  it("leaves other sessions intact", async () => {
+    await store.pushMarkdown({ session_id: "keep", title: "t", content: "c" });
+    await store.pushMarkdown({ session_id: "kill", title: "t", content: "c" });
+    await store.deleteSession("kill");
+    expect(await store.listSessions().then((s) => s.map((x) => x.session_id))).toEqual(["keep"]);
   });
 });
 

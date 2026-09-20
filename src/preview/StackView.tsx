@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { previewApi, latestOf, previewUrl, navigate, onRouteChange, type Artifact, type ArtifactMeta } from "./previewApi";
 import { MarkdownArtifact } from "./MarkdownArtifact";
 import { ChartView, parseChartContract, type ChartContract } from "./ChartView";
+import { MediaArtifact } from "./MediaArtifact";
 import { MermaidArtifact } from "./MermaidArtifact";
 import { Icon } from "../components/Icon";
 
@@ -87,6 +88,8 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
                 ) : (
                   <p className="aur-preview__error">Invalid chart artifact — malformed contract JSON.</p>
                 )
+              ) : current.type === "image" || current.type === "video" ? (
+                <MediaArtifact artifact={current} />
               ) : current.type === "mermaid" ? (
                 <MermaidArtifact content={current.content} />
               ) : (
