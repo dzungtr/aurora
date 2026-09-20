@@ -54,6 +54,8 @@ async function listTree(dir: string, base: string): Promise<TreeNode[]> {
 export interface ServerOptions {
   /** Base directory for artifact storage (default ~/.local/share/aurora/artifacts) */
   artifactsDir?: string;
+  /** Size cap for base64/url media pushes (default 50 MiB) */
+  mediaSizeCap?: number;
 }
 
 export function createServer(rootDir: string, port: number, options: ServerOptions = {}) {
@@ -80,7 +82,7 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
       "/mcp": {
         async POST(req) {
           try {
-            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`, liveBus);
+            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`, options.mediaSizeCap, liveBus);
           } catch (err) {
             console.error(err);
             return errorResponse(500, "MCP handler error");
@@ -91,6 +93,66 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
         },
         async DELETE() {
           return errorResponse(405, "No sessions in stateless mode");
+        },
+      },
+      "/api/preview/sessions/:sid": {
+        async DELETE(req) {
+          const { sid } = (req as any).params ?? {};
+          try {
+            const deleted = await artifactStore.deleteSession(sid);
+            if (!deleted) return errorResponse(404, "Not found");
+            return Response.json({ ok: true });
+          } catch (err) {
+            return handleError(err);
+          }
+        },
+      },
+      "/api/preview/sessions/:sid/artifacts/:aid/blob": {
+        // Media snapshot serving. Range support (206) is implemented manually
+        // so video seeking works; Bun routes don't apply Range to Blob parts.
+        async GET(req) {
+          const { sid, aid } = (req as any).params ?? {};
+          try {
+            const p = await artifactStore.blobPath(sid, aid);
+            if (!p) return errorResponse(404, "Not found");
+            const meta = await artifactStore.getArtifactMeta(sid, aid);
+            const file = Bun.file(p);
+            const size = file.size;
+            const range = req.headers.get("range");
+            const baseHeaders: Record<string, string> = {
+              "content-type": meta?.mime ?? "application/octet-stream",
+              "accept-ranges": "bytes",
+            };
+            const m = range?.match(/^bytes=(\d*)-(\d*)$/);
+            if (m && (m[1] !== "" || m[2] !== "")) {
+              let start = m[1] === "" ? null : Number(m[1]);
+              let end = m[2] === "" ? null : Number(m[2]);
+              if (start === null) {
+                // suffix range: last N bytes
+                start = Math.max(0, size - (end ?? 0));
+                end = size - 1;
+              } else if (end === null || end >= size) {
+                end = size - 1;
+              }
+              if (start >= size || start > end) {
+                return new Response(null, {
+                  status: 416,
+                  headers: { "content-range": `bytes */${size}` },
+                });
+              }
+              return new Response(file.slice(start, end + 1), {
+                status: 206,
+                headers: {
+                  ...baseHeaders,
+                  "content-range": `bytes ${start}-${end}/${size}`,
+                  "content-length": String(end - start + 1),
+                },
+              });
+            }
+            return new Response(file, { headers: baseHeaders });
+          } catch (err) {
+            return handleError(err);
+          }
         },
       },
       "/api/preview/sessions/:sid/artifacts/:aid": {
