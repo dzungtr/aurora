@@ -26,8 +26,8 @@ export function LiveToast({ viewingSessionId }: { viewingSessionId?: string }) {
 
   if (!toast) return null;
   return (
-    <div className="aur-toast" role="status">
-      <span className="aur-toast__badge">{toast.count}</span>
+    <div className="aur-live-toast" role="status">
+      <span className="aur-live-toast__badge">{toast.count}</span>
       new artifact{toast.count === 1 ? "" : "s"} in <b>{toast.session_id}</b>
     </div>
   );

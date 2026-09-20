@@ -3,7 +3,7 @@ import indexHtml from "./index.html";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { ArtifactStore, InvalidArtifactIdError } from "./lib/artifactStore";
-import { LiveBus, artifactEvent } from "./lib/liveBus";
+import { LiveBus } from "./lib/liveBus";
 import { handleMcpRequest } from "./lib/mcpSurface";
 import { readdir, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
