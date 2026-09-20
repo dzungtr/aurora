@@ -314,3 +314,42 @@ describe("ArtifactStore.deleteSession", () => {
     expect(await store.listSessions().then((s) => s.map((x) => x.session_id))).toEqual(["keep"]);
   });
 });
+
+describe("ArtifactStore.pushMermaid", () => {
+  it("pushes with type mermaid, same append/replace semantics as markdown", async () => {
+    const first = await store.pushMermaid({
+      session_id: "diag",
+      title: "Auth flow",
+      code: "flowchart TD\n  A --> B",
+      session_title: "Diagrams",
+    });
+    expect(first.created).toBe(true);
+    expect(first.artifact.type).toBe("mermaid");
+    const got = await store.getArtifact("diag", first.artifact.artifact_id);
+    expect(got?.content).toBe("flowchart TD\n  A --> B");
+
+    const second = await store.pushMermaid({
+      session_id: "diag",
+      title: "Auth flow v2",
+      code: "flowchart TD\n  A --> C",
+      artifact_id: first.artifact.artifact_id,
+    });
+    expect(second.created).toBe(false);
+    const artifacts = await store.listArtifacts("diag");
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0].title).toBe("Auth flow v2");
+    expect(artifacts[0].type).toBe("mermaid");
+    expect((await store.getArtifact("diag", first.artifact.artifact_id))?.content).toBe(
+      "flowchart TD\n  A --> C"
+    );
+  });
+
+  it("keeps mermaid and markdown artifacts isolated within one session", async () => {
+    await store.pushMarkdown({ session_id: "mix", title: "Doc", content: "# doc" });
+    const d = await store.pushMermaid({ session_id: "mix", title: "Diagram", code: "sequenceDiagram\nA->>B: hi" });
+    const artifacts = await store.listArtifacts("mix");
+    expect(artifacts).toHaveLength(2);
+    expect(artifacts.map((a) => a.type).sort()).toEqual(["markdown", "mermaid"]);
+    expect(d.artifact.seq).toBe(2);
+  });
+});
