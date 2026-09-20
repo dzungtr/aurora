@@ -2,7 +2,7 @@ import { resolveSafe, PathTraversalError } from "./lib/fsSafe";
 import indexHtml from "./index.html";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { ArtifactStore } from "./lib/artifactStore";
+import { ArtifactStore, InvalidArtifactIdError } from "./lib/artifactStore";
 import { handleMcpRequest } from "./lib/mcpSurface";
 import { readdir, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -18,6 +18,7 @@ function errorResponse(status: number, message: string) {
 
 function handleError(err: unknown) {
   if (err instanceof PathTraversalError) return errorResponse(400, "Invalid path");
+  if (err instanceof InvalidArtifactIdError) return errorResponse(404, "Not found");
   if ((err as any)?.code === "ENOENT") return errorResponse(404, "Not found");
   console.error(err);
   return errorResponse(500, "Internal server error");

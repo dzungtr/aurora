@@ -98,6 +98,9 @@ export class ArtifactStore {
   }
 
   async getArtifactMeta(sessionId: string, artifactId: string): Promise<ArtifactMeta | null> {
+    // ids become path segments; reject traversal attempts before touching disk
+    validateId(sessionId);
+    validateId(artifactId);
     try {
       return JSON.parse(
         await readFile(join(artifactDir(this.baseDir, sessionId, artifactId), "meta.json"), "utf-8")
@@ -170,7 +173,10 @@ export class ArtifactStore {
     const artifactId = input.artifact_id ?? randomUUID();
     const dir = artifactDir(this.baseDir, input.session_id, artifactId);
     const existing = await this.getArtifactMeta(input.session_id, artifactId);
-    const seq = existing?.seq ?? (await this.listArtifacts(input.session_id)).length + 1;
+    // max(seq)+1 (not length+1) so ordering stays stable after future deletions
+    // and concurrent pushes cannot derive the same seq from a mid-list count
+    const seq = existing?.seq
+      ?? Math.max(0, ...(await this.listArtifacts(input.session_id)).map((a) => a.seq)) + 1;
     const artifact: ArtifactMeta = {
       artifact_id: artifactId,
       type: "markdown",

@@ -130,3 +130,30 @@ describe("ArtifactStore.pushMarkdown", () => {
     expect((await store2.listSessions()).map((s) => s.session_id)).toEqual(["s"]);
   });
 });
+
+describe("ArtifactStore.getArtifact/getArtifactMeta (id validation)", () => {
+  it("rejects traversal ids on the read path", async () => {
+    await expect(store.getArtifact("s", "../../escape")).rejects.toThrow(InvalidArtifactIdError);
+    await expect(store.getArtifact("../../escape", "a")).rejects.toThrow(InvalidArtifactIdError);
+    await expect(store.getArtifactMeta("s", "a/b")).rejects.toThrow(InvalidArtifactIdError);
+  });
+
+  it("returns null (not a throw) for valid ids that do not exist", async () => {
+    expect(await store.getArtifact("s", "missing")).toBeNull();
+  });
+});
+
+describe("ArtifactStore.pushMarkdown seq assignment", () => {
+  it("assigns max(seq)+1 so ordering stays stable after a deletion", async () => {
+    const a = await store.pushMarkdown({ session_id: "s", title: "a", content: "a" });
+    const b = await store.pushMarkdown({ session_id: "s", title: "b", content: "b" });
+    expect(b.artifact.seq).toBe(a.artifact.seq + 1);
+    // simulate T7-style deletion of the OLDEST artifact: length+1 would reuse
+    // the still-live seq 2; max(seq)+1 must yield 3
+    rmSync(artifactDir(baseDir, "s", a.artifact.artifact_id), { recursive: true, force: true });
+    const c = await store.pushMarkdown({ session_id: "s", title: "c", content: "c" });
+    expect(c.artifact.seq).toBe(b.artifact.seq + 1);
+    const seqs = (await store.listArtifacts("s")).map((x) => x.seq).sort();
+    expect(seqs).toEqual([2, 3]);
+  });
+});
