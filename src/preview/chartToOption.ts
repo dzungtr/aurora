@@ -19,14 +19,33 @@ function baseOption(): EChartsOption {
   };
 }
 
+const sharedAxisStyle = {
+  axisLine: { lineStyle: { color: theme.axis.lineColor } },
+  axisLabel: { color: theme.axis.labelColor },
+};
+
 function categoryAxes(categories: (string | number)[]) {
-  const shared = {
-    axisLine: { lineStyle: { color: theme.axis.lineColor } },
-    axisLabel: { color: theme.axis.labelColor },
-  };
   return [
-    { type: "category" as const, data: categories, ...shared },
-    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...shared },
+    { type: "category" as const, data: categories, ...sharedAxisStyle },
+    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
+  ];
+}
+
+// Per chartContract: line/area x values are categories when all-strings, numeric
+// values otherwise; scatter x/y are always numeric values.
+function lineAxes(x: (string | number)[]) {
+  return x.every((v) => typeof v === "string")
+    ? categoryAxes(x)
+    : [
+        { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
+        { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
+      ];
+}
+
+function valueAxes() {
+  return [
+    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
+    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
   ];
 }
 
@@ -78,8 +97,8 @@ export function chartToOption(contract: ChartContract): EChartsOption {
         tooltip: { trigger: "axis" },
         legend: { ...theme.legend },
         grid: { ...theme.grid },
-        xAxis: categoryAxes(data.x)[0],
-        yAxis: categoryAxes(data.x)[1],
+        xAxis: lineAxes(data.x)[0],
+        yAxis: lineAxes(data.x)[1],
         series: data.series.map((s) => ({
           name: s.name,
           type: "line" as const,
@@ -97,8 +116,8 @@ export function chartToOption(contract: ChartContract): EChartsOption {
         tooltip: { trigger: "item" },
         legend: { ...theme.legend },
         grid: { ...theme.grid },
-        xAxis: categoryAxes([])[0],
-        yAxis: categoryAxes([])[1],
+        xAxis: valueAxes()[0],
+        yAxis: valueAxes()[1],
         series: data.series.map((s) => ({
           name: s.name,
           type: "scatter" as const,

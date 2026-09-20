@@ -64,6 +64,37 @@ describe("chartToOption", () => {
     expect(opt.series[0].data).toEqual([[1, 2], [3, 4]]);
   });
 
+  test("scatter: numeric x is a value axis, never ordinalized", () => {
+    const opt = chartToOption({
+      chart_type: "scatter",
+      data: { kind: "scatter", series: [{ name: "s", points: [[0, 1], [100, 2], [101, 3]] }] },
+    }) as any;
+    expect(opt.xAxis.type).toBe("value");
+    expect(opt.yAxis.type).toBe("value");
+    expect(opt.xAxis).not.toHaveProperty("data"); // no category bucketing
+  });
+
+  test("line: numeric x uses value axes (non-uniform spacing preserved), string x stays categorical", () => {
+    const numeric = chartToOption({
+      chart_type: "line",
+      data: { kind: "line", x: [0, 10, 11], series: [{ name: "s", values: [1, 2, 3] }] },
+    }) as any;
+    expect(numeric.xAxis.type).toBe("value");
+    expect(numeric.yAxis.type).toBe("value");
+    expect(numeric.series[0].data).toEqual([1, 2, 3]);
+
+    const categorical = chartToOption(valid.line) as any;
+    expect(categorical.xAxis.type).toBe("category");
+    expect(categorical.xAxis.data).toEqual(["a", "b"]);
+  });
+
+  test("theme legend uses real ECharts sizing keys (itemWidth/itemHeight, no iconSize)", () => {
+    const opt = chartToOption(valid.bar) as any;
+    expect(opt.legend.itemWidth).toBe(10);
+    expect(opt.legend.itemHeight).toBe(10);
+    expect(opt.legend).not.toHaveProperty("iconSize");
+  });
+
   test("mismatched contract kind throws (defense in depth behind tool validation)", () => {
     const bad: ChartContract = {
       chart_type: "bar",
