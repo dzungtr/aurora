@@ -28,6 +28,10 @@ export function TopBar({ filter, onFilter, layout, onLayout, onNewFile, onNewFol
         <div className="aur-brand__name">Aurora <b>Files</b></div>
       </div>
 
+      <a className="aur-btn aur-btn--ghost" href="/preview">
+        <Icon name="uil:layers" size={15} /> Artifacts
+      </a>
+
       <div className="aur-spacer" />
 
       <div className="aur-search">

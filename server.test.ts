@@ -8,11 +8,16 @@ let root: string;
 let server: ReturnType<typeof createServer>;
 let base: string;
 
+// The sandbox forbids ephemeral ports (port 0), so tests pin a fixed loopback
+// port from the allowed dev range (3000-3999 / 5000-5999 / 7634). The previous
+// server is stopped in afterEach, so sequential reuse of the port is safe.
+const TEST_PORT = 5270;
+
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "zui-explorer-server-"));
   writeFileSync(join(root, "hello.txt"), "hi");
-  server = createServer(root, 0);
-  base = `http://localhost:${server.port}`;
+  server = createServer(root, TEST_PORT);
+  base = `http://localhost:${TEST_PORT}`;
 });
 
 afterEach(() => {
