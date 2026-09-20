@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewApi, latestOf, previewUrl, navigate, onRouteChange, type Artifact, type ArtifactMeta } from "./previewApi";
 import { MarkdownArtifact } from "./MarkdownArtifact";
+import { MediaArtifact } from "./MediaArtifact";
 import { Icon } from "../components/Icon";
 
 export interface StackViewProps {
@@ -69,7 +70,11 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
         {current && (
           <>
             <div className="aur-stack__stage">
-              <MarkdownArtifact content={current.content} />
+              {current.type === "image" || current.type === "video" ? (
+                <MediaArtifact artifact={current} />
+              ) : (
+                <MarkdownArtifact content={current.content} />
+              )}
             </div>
             <nav className="aur-stack__rail" aria-label="Artifact stack">
               <button

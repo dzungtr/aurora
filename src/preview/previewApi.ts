@@ -51,6 +51,17 @@ export const previewApi = {
     );
     return { ...raw.meta, session_id: raw.session_id, content: raw.content };
   },
+
+  /** Delete a session and all its artifacts from the store. */
+  async deleteSession(sessionId: string): Promise<void> {
+    const res = await fetch(`/api/preview/sessions/${encodeURIComponent(sessionId)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error ?? `Request failed: ${res.status}`);
+    }
+  },
 };
 
 /** The artifact the user lands on when the deep link omits the id (latest = highest seq). */

@@ -1,7 +1,7 @@
 // Session list page: title, artifact count, last activity, newest first
 // (server already sorts by last_activity desc).
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { previewApi, type SessionWithCount, previewUrl } from "./previewApi";
 import { Icon } from "../components/Icon";
 
@@ -21,14 +21,28 @@ export function SessionList() {
   const [sessions, setSessions] = useState<SessionWithCount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
     let alive = true;
     previewApi
       .listSessions()
       .then((s) => alive && setSessions(s))
       .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
     return () => { alive = false; };
-  }, []);
+  };
+
+  useEffect(load, []);
+
+  const remove = async (e: MouseEvent<HTMLButtonElement>, sessionId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("Delete this session and all its artifacts from disk?")) return;
+    try {
+      await previewApi.deleteSession(sessionId);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   return (
     <div className="aur-preview">
@@ -60,6 +74,14 @@ export function SessionList() {
                 <span className="aur-sessrow__count">{s.artifact_count} artifact{s.artifact_count === 1 ? "" : "s"}</span>
                 <span className="aur-sessrow__time">{fmtActivity(s.last_activity)}</span>
               </div>
+              <button
+                className="aur-sessrow__delete"
+                title="Delete session"
+                aria-label={`Delete session ${s.title}`}
+                onClick={(e) => remove(e, s.session_id)}
+              >
+                <Icon name="uil:trash" size={16} />
+              </button>
             </a>
           ))}
         </div>
