@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { previewApi, latestOf, previewUrl, navigate, onRouteChange, type Artifact, type ArtifactMeta } from "./previewApi";
 import { onArtifactEvent } from "./liveSocket";
 import { MarkdownArtifact } from "./MarkdownArtifact";
+import { MermaidArtifact } from "./MermaidArtifact";
 import { Icon } from "../components/Icon";
 
 export interface StackViewProps {
@@ -105,7 +106,11 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
         {current && (
           <>
             <div className="aur-stack__stage">
-              <MarkdownArtifact content={current.content} />
+              {current.type === "mermaid" ? (
+                <MermaidArtifact content={current.content} />
+              ) : (
+                <MarkdownArtifact content={current.content} />
+              )}
             </div>
             <nav className="aur-stack__rail" aria-label="Artifact stack">
               <button
