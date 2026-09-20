@@ -426,6 +426,15 @@
 .aur-artifact-md hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .aur-artifact-md pre.md-pre { background: var(--e1); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow: auto; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; color: var(--text-body); margin: 12px 0; }
 
+/* --- T6: media artifacts + session delete --- */
+.aur-media { display: flex; align-items: center; justify-content: center; padding: 18px; min-height: 200px; }
+.aur-media__media { max-width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }
+.aur-sessrow__delete {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; margin-left: 8px; border: none; border-radius: 6px;
+  background: transparent; color: var(--text-light); cursor: pointer;
+}
+.aur-sessrow__delete:hover { background: var(--e1); color: #e5484d; }
 /* Mermaid artifact view (dark theme from mermaid.initialize; layout only here) */
 .aur-mermaid { max-width: 900px; width: 100%; display: flex; justify-content: center; }
 .aur-mermaid__svg { width: 100%; overflow: auto; }

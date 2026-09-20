@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { previewApi, latestOf, previewUrl, navigate, onRouteChange, type Artifact, type ArtifactMeta } from "./previewApi";
 import { MarkdownArtifact } from "./MarkdownArtifact";
+import { MediaArtifact } from "./MediaArtifact";
 import { MermaidArtifact } from "./MermaidArtifact";
 import { Icon } from "../components/Icon";
 
@@ -70,7 +71,9 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
         {current && (
           <>
             <div className="aur-stack__stage">
-              {current.type === "mermaid" ? (
+              {current.type === "image" || current.type === "video" ? (
+                <MediaArtifact artifact={current} />
+              ) : current.type === "mermaid" ? (
                 <MermaidArtifact content={current.content} />
               ) : (
                 <MarkdownArtifact content={current.content} />
