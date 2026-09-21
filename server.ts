@@ -65,7 +65,11 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
   const externalPort = process.env.AURORA_PUBLIC_PORT ? Number(process.env.AURORA_PUBLIC_PORT) : port;
   return Bun.serve({
     port,
-    hostname: "127.0.0.1",
+    // Defaults to loopback-only, matching aurora's "binds to localhost only"
+    // guarantee. Containers need this overridden to 0.0.0.0 — Docker's port
+    // publishing forwards to the container's external interface, which a
+    // loopback-only bind never receives traffic on (see Dockerfile).
+    hostname: process.env.AURORA_HOST ?? "127.0.0.1",
     development: process.env.NODE_ENV !== "production",
     routes: {
       "/": indexHtml,
