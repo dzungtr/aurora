@@ -1,15 +1,15 @@
 {
-  "name": "zui-explorer",
+  "name": "aurora",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "zui-explorer": "./cli.ts"
+    "aurora": "./cli.ts"
   },
   "scripts": {
     "dev": "bun --hot cli.ts .",
     "test": "bun test",
-    "compile": "bun build ./cli.ts --compile --outfile zui-explorer --external fs --external http --external https --external url"
+    "compile": "bun build ./cli.ts --compile --outfile aurora --external fs --external http --external https --external url"
   },
   "dependencies": {
     "@iconify/react": "^5.0.2",

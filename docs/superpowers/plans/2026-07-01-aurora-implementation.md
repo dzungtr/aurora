@@ -1,8 +1,8 @@
-# zui-explorer Implementation Plan
+# aurora Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build zui-explorer, a standalone `bunx zui-explorer <folder>` local file explorer + editor web app, per `docs/superpowers/specs/2026-07-01-zui-explorer-design.md`.
+**Goal:** Build aurora, a standalone `bunx aurora <folder>` local file explorer + editor web app, per `docs/superpowers/specs/2026-07-01-aurora-design.md`.
 
 **Architecture:** Single Bun process. `Bun.serve()` serves the bundled React frontend (via HTML import) and handles `/api/*` filesystem routes in the same server. All filesystem access goes through `lib/fsSafe.ts::resolveSafe()`, the single path-traversal guard. No build step — Bun bundles on the fly in dev and "production" alike.
 
@@ -50,12 +50,12 @@ Tasks are grouped into batches. Within a batch, tasks touch disjoint files and c
 
 ```json
 {
-  "name": "zui-explorer",
+  "name": "aurora",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "zui-explorer": "./cli.ts"
+    "aurora": "./cli.ts"
   },
   "scripts": {
     "dev": "bun --hot cli.ts .",
@@ -110,7 +110,7 @@ node_modules/
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>zui-explorer</title>
+    <title>aurora</title>
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
@@ -404,7 +404,7 @@ import { resolveSafe, PathTraversalError } from "./fsSafe";
 let root: string;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "zui-explorer-test-"));
+  root = mkdtempSync(join(tmpdir(), "aurora-test-"));
   mkdirSync(join(root, "a", "b"), { recursive: true });
   writeFileSync(join(root, "a", "b", "c.txt"), "hello");
 });
@@ -434,7 +434,7 @@ describe("resolveSafe", () => {
   });
 
   it("rejects a symlink that escapes root", () => {
-    const outside = mkdtempSync(join(tmpdir(), "zui-explorer-outside-"));
+    const outside = mkdtempSync(join(tmpdir(), "aurora-outside-"));
     writeFileSync(join(outside, "secret.txt"), "nope");
     symlinkSync(outside, join(root, "escape-link"));
     expect(() => resolveSafe(root, "escape-link/secret.txt")).toThrow(PathTraversalError);
@@ -530,7 +530,7 @@ git commit -m "feat: scaffold project and add path-safety module"
 **Interfaces:**
 - Consumes: `resolveSafe(rootDir: string, userPath: string): string`, `PathTraversalError` from `./lib/fsSafe`.
 - Produces: `createServer(rootDir: string, port: number)` — returns the value of `Bun.serve(...)` (has `.port`, `.stop(closeActiveConnections?: boolean)`). Task 6 (integration) and this task's own tests call it directly; `cli.ts` calls it too.
-- Produces: `cli.ts` — parses `zui-explorer <path> [--port <port>]`, resolves `<path>` to an absolute path, calls `createServer`, logs the listening URL.
+- Produces: `cli.ts` — parses `aurora <path> [--port <port>]`, resolves `<path>` to an absolute path, calls `createServer`, logs the listening URL.
 
 - [ ] **Step 1: Write the failing tests for the API routes**
 
@@ -547,7 +547,7 @@ let server: ReturnType<typeof createServer>;
 let base: string;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "zui-explorer-server-"));
+  root = mkdtempSync(join(tmpdir(), "aurora-server-"));
   writeFileSync(join(root, "hello.txt"), "hi");
   server = createServer(root, 0);
   base = `http://localhost:${server.port}`;
@@ -789,7 +789,7 @@ function parseArgs(argv: string[]) {
   }
   const rootDir = positional[0];
   if (!rootDir) {
-    console.error("Usage: zui-explorer <path> [--port <port>]");
+    console.error("Usage: aurora <path> [--port <port>]");
     process.exit(1);
   }
   return { rootDir: resolve(rootDir), port };
@@ -797,7 +797,7 @@ function parseArgs(argv: string[]) {
 
 const { rootDir, port } = parseArgs(process.argv);
 const server = createServer(rootDir, port);
-console.log(`zui-explorer serving ${rootDir} at http://localhost:${server.port}`);
+console.log(`aurora serving ${rootDir} at http://localhost:${server.port}`);
 ```
 
 - [ ] **Step 6: Manually smoke-test the CLI**
@@ -1219,7 +1219,7 @@ function buildTree(entries: TreeEntry[]): Node[] {
 
 function loadExpanded(): Set<string> {
   try {
-    const raw = localStorage.getItem("zui-explorer:expanded");
+    const raw = localStorage.getItem("aurora:expanded");
     return raw ? new Set(JSON.parse(raw)) : new Set();
   } catch {
     return new Set();
@@ -1227,11 +1227,11 @@ function loadExpanded(): Set<string> {
 }
 
 function saveExpanded(expanded: Set<string>) {
-  localStorage.setItem("zui-explorer:expanded", JSON.stringify([...expanded]));
+  localStorage.setItem("aurora:expanded", JSON.stringify([...expanded]));
 }
 
 function loadWidth(): number {
-  const raw = localStorage.getItem("zui-explorer:sidebar-width");
+  const raw = localStorage.getItem("aurora:sidebar-width");
   return raw ? Number(raw) : 260;
 }
 
@@ -1271,7 +1271,7 @@ export function FileTree({ entries, selectedPath, onSelect, onCreateFile, onCrea
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       setWidth((w) => {
-        localStorage.setItem("zui-explorer:sidebar-width", String(w));
+        localStorage.setItem("aurora:sidebar-width", String(w));
         return w;
       });
     };
@@ -1580,11 +1580,11 @@ Expected: no errors.
 - [ ] **Step 3: Smoke-test the running app against a scratch folder**
 
 ```bash
-mkdir -p /tmp/zui-explorer-smoke/sub
-echo '# Hello' > /tmp/zui-explorer-smoke/readme.md
-echo '{"a":1}' > /tmp/zui-explorer-smoke/data.json
+mkdir -p /tmp/aurora-smoke/sub
+echo '# Hello' > /tmp/aurora-smoke/readme.md
+echo '{"a":1}' > /tmp/aurora-smoke/data.json
 chmod +x cli.ts
-./cli.ts /tmp/zui-explorer-smoke --port 4321
+./cli.ts /tmp/aurora-smoke --port 4321
 ```
 
 In another terminal:
@@ -1595,7 +1595,7 @@ curl -s http://localhost:4321/api/tree
 curl -s "http://localhost:4321/api/file?path=readme.md"
 ```
 
-Expected: `/` returns HTML (confirms the `index.html` → `src/index.tsx` bundling resolves correctly now that Task 3's files exist); `/api/tree` lists `readme.md`, `data.json`, `sub`; `/api/file?path=readme.md` returns `# Hello`. Then open `http://localhost:4321/` in a browser, confirm the dark-themed tree + editor render, click `readme.md`, edit it, save, and confirm the change persisted with `cat /tmp/zui-explorer-smoke/readme.md`. Stop the server with Ctrl+C.
+Expected: `/` returns HTML (confirms the `index.html` → `src/index.tsx` bundling resolves correctly now that Task 3's files exist); `/api/tree` lists `readme.md`, `data.json`, `sub`; `/api/file?path=readme.md` returns `# Hello`. Then open `http://localhost:4321/` in a browser, confirm the dark-themed tree + editor render, click `readme.md`, edit it, save, and confirm the change persisted with `cat /tmp/aurora-smoke/readme.md`. Stop the server with Ctrl+C.
 
 - [ ] **Step 4: Fix any integration issues found in Steps 1–3**
 
@@ -1604,7 +1604,7 @@ If `bun test`, `tsc`, or the smoke test surfaces a wiring problem (e.g. a prop m
 - [ ] **Step 5: Clean up scratch files and commit any fixes**
 
 ```bash
-rm -rf /tmp/zui-explorer-smoke
+rm -rf /tmp/aurora-smoke
 git status
 ```
 

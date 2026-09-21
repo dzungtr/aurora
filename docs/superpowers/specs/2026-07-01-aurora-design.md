@@ -1,4 +1,4 @@
-# zui-explorer — Design Spec
+# aurora — Design Spec
 
 Date: 2026-07-01
 Status: Approved (via superpowers:brainstorming session)
@@ -15,7 +15,7 @@ code or dependency on the zui monorepo.
 ## Goals
 
 - Point the tool at one local folder and get a file-tree + editor UI in the browser,
-  no separate build/deploy step: `bunx zui-explorer ./some-folder`.
+  no separate build/deploy step: `bunx aurora ./some-folder`.
 - Browse, view, and edit files: syntax-highlighted text, rendered Markdown preview,
   image preview, and full CRUD on files/folders (create, rename, delete, save).
 - Match zui's dark visual theme and file-tree/editor interaction patterns closely
@@ -58,8 +58,8 @@ step — Bun bundles on the fly either way, which keeps the CLI's distribution s
 to "install + run, nothing to compile."
 
 ```
-zui-explorer/
-├── cli.ts                  # #!/usr/bin/env bun — parses `zui-explorer <path> [--port]`,
+aurora/
+├── cli.ts                  # #!/usr/bin/env bun — parses `aurora <path> [--port]`,
 │                             # sets ROOT_DIR, starts server.ts
 ├── server.ts                # Bun.serve({ routes: { "/": index.html import,
 │                             #   "/api/tree": ..., "/api/file": ..., ... },
@@ -77,7 +77,7 @@ zui-explorer/
 │   └── styles.css              # dark theme, same CSS variables as zui
 ├── lib/fsSafe.ts             # server-side: resolves + validates every path stays
 │                             # inside ROOT_DIR (blocks path traversal)
-├── package.json               # "bin": { "zui-explorer": "./cli.ts" };
+├── package.json               # "bin": { "aurora": "./cli.ts" };
 │                             # deps: react, react-dom; devDeps: @types/bun, typescript
 └── tsconfig.json
 ```
