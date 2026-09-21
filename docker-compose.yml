@@ -1,0 +1,19 @@
+services:
+  aurora:
+    build: .
+    image: aurora:latest
+    restart: unless-stopped
+    ports:
+      # Bind the published port to the host's loopback only, so the container
+      # stays reachable from this machine alone — matching aurora's own
+      # "localhost only" guarantee even though it must bind 0.0.0.0 inside
+      # the container's network namespace (see Dockerfile / AURORA_HOST).
+      - "127.0.0.1:7634:7634"
+    volumes:
+      # Directory Aurora serves as a file explorer — point this at whatever
+      # project you want to browse/edit and push MCP artifacts against.
+      - ${AURORA_WORKSPACE:-.}:/workspace
+      - aurora-artifacts:/root/.local/share/aurora/artifacts
+
+volumes:
+  aurora-artifacts:
