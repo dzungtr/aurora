@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
 import type { Layout } from "../App";
+import { totalUnread, useUnreadCounts } from "../preview/unreadStore";
 
 export interface TopBarProps {
   filter: string;
@@ -13,6 +14,7 @@ export interface TopBarProps {
 
 export function TopBar({ filter, onFilter, layout, onLayout, onNewFile, onNewFolder }: TopBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const unread = totalUnread(useUnreadCounts());
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -30,6 +32,7 @@ export function TopBar({ filter, onFilter, layout, onLayout, onNewFile, onNewFol
 
       <a className="aur-btn aur-btn--ghost" href="/preview">
         <Icon name="uil:layers" size={15} /> Artifacts
+        {unread > 0 && <span className="aur-preview__navbadge">{unread}</span>}
       </a>
 
       <div className="aur-spacer" />
