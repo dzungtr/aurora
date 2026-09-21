@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { totalUnread, useUnreadCounts } from "./unreadStore";
 
 export function PreviewTopBar() {
@@ -39,6 +40,8 @@ export function PreviewTopBar() {
       </nav>
 
       <div className="aur-spacer" />
+
+      <ThemeToggle />
 
       <div className="aur-conn">
         <span className="aur-conn__dot" />

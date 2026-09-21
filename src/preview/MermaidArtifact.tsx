@@ -1,15 +1,44 @@
-// Mermaid artifact renderer: mermaid.js client-side, dark theme matching the
-// app. Invalid source renders an in-page error (with the source visible) so
-// the agent can see its diagram failed and retry — never a blank pane.
+// Mermaid artifact renderer: mermaid.js client-side, on the same purple-
+// accented "base" theme as the rest of Aurora, re-initialized whenever the
+// app theme flips. Invalid source renders an in-page error (with the source
+// visible) so the agent can see its diagram failed and retry — never a
+// blank pane.
 
 import { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
+import { useTheme, type Theme } from "../lib/themeStore";
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: "dark",
-  securityLevel: "strict",
-});
+const MERMAID_VARS: Record<Theme, Record<string, string>> = {
+  light: {
+    background: "#fafafa", primaryColor: "#efe8fb", primaryBorderColor: "#673ab6",
+    primaryTextColor: "#222222", secondaryColor: "#e7f0fd", tertiaryColor: "#f7f7f7",
+    mainBkg: "#efe8fb", nodeBorder: "#673ab6", nodeTextColor: "#222222",
+    titleColor: "#222222", textColor: "#222222", lineColor: "#8a8a8a",
+    edgeLabelBackground: "#fafafa", tertiaryTextColor: "#333333",
+    clusterBkg: "#f7f7f7", clusterBorder: "#d9d9d9",
+  },
+  dark: {
+    background: "#1e1e1e", primaryColor: "#2b2141", primaryBorderColor: "#7e57c2",
+    primaryTextColor: "#e8e8e8", secondaryColor: "#1f2b3d", tertiaryColor: "#242424",
+    mainBkg: "#2b2141", nodeBorder: "#7e57c2", nodeTextColor: "#e8e8e8",
+    titleColor: "#e8e8e8", textColor: "#e8e8e8", lineColor: "#8a8a8a",
+    edgeLabelBackground: "#1e1e1e", tertiaryTextColor: "#b0b0b0",
+    clusterBkg: "#242424", clusterBorder: "#3a3a3a",
+  },
+};
+
+let initializedTheme: Theme | null = null;
+
+function ensureInitialized(theme: Theme): void {
+  if (initializedTheme === theme) return;
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "base",
+    securityLevel: "strict",
+    themeVariables: MERMAID_VARS[theme],
+  });
+  initializedTheme = theme;
+}
 
 let renderSeq = 0;
 
@@ -19,12 +48,14 @@ function extractMessage(err: unknown): string {
 }
 
 export function MermaidArtifact({ content }: { content: string }) {
+  const theme = useTheme();
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const holderRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let alive = true;
+    ensureInitialized(theme);
     (async () => {
       try {
         // Render into a detached holder so a failed parse never flashes
@@ -49,7 +80,7 @@ export function MermaidArtifact({ content }: { content: string }) {
     return () => {
       alive = false;
     };
-  }, [content]);
+  }, [content, theme]);
 
   if (error) {
     return (

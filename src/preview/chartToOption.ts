@@ -1,17 +1,26 @@
 // Contract-to-ECharts-option translator: a PURE function from a validated
-// chart contract ({chart_type, data}) to a complete ECharts option object,
-// with every visual decision coming from the house theme JSON. No rendering,
-// no state, no ambient input — same contract in, same option out.
+// chart contract ({chart_type, data}) plus the active theme name to a
+// complete ECharts option object, with every visual decision coming from
+// the house theme JSON. No rendering, no state, no other ambient input —
+// same contract+theme in, same option out.
 import type { EChartsOption } from "echarts";
 import type { ChartType, ChartData } from "../../lib/chartContract";
-import theme from "./chartTheme.json";
+import darkTheme from "./chartTheme.json";
+import lightTheme from "./chartTheme.light.json";
 
 export interface ChartContract {
   chart_type: ChartType;
   data: ChartData;
 }
 
-function baseOption(): EChartsOption {
+export type ChartThemeName = "light" | "dark";
+type ChartTheme = typeof darkTheme;
+
+function themeFor(name: ChartThemeName): ChartTheme {
+  return name === "light" ? lightTheme : darkTheme;
+}
+
+function baseOption(theme: ChartTheme): EChartsOption {
   return {
     backgroundColor: theme.backgroundColor,
     textStyle: { ...theme.textStyle },
@@ -19,46 +28,58 @@ function baseOption(): EChartsOption {
   };
 }
 
-const sharedAxisStyle = {
-  axisLine: { lineStyle: { color: theme.axis.lineColor } },
-  axisLabel: { color: theme.axis.labelColor },
-};
+function tooltipFor(trigger: "item" | "axis", theme: ChartTheme) {
+  return {
+    trigger,
+    backgroundColor: theme.tooltip.backgroundColor,
+    borderColor: theme.tooltip.borderColor,
+    textStyle: { color: theme.tooltip.textColor },
+  };
+}
 
-function categoryAxes(categories: (string | number)[]) {
+function sharedAxisStyle(theme: ChartTheme) {
+  return {
+    axisLine: { lineStyle: { color: theme.axis.lineColor } },
+    axisLabel: { color: theme.axis.labelColor },
+  };
+}
+
+function categoryAxes(categories: (string | number)[], theme: ChartTheme) {
   return [
-    { type: "category" as const, data: categories, ...sharedAxisStyle },
-    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
+    { type: "category" as const, data: categories, ...sharedAxisStyle(theme) },
+    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle(theme) },
   ];
 }
 
 // Per chartContract: line/area x values are categories when all-strings, numeric
 // values otherwise; scatter x/y are always numeric values.
-function lineAxes(x: (string | number)[]) {
+function lineAxes(x: (string | number)[], theme: ChartTheme) {
   return x.every((v) => typeof v === "string")
-    ? categoryAxes(x)
+    ? categoryAxes(x, theme)
     : [
-        { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
-        { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
+        { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle(theme) },
+        { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle(theme) },
       ];
 }
 
-function valueAxes() {
+function valueAxes(theme: ChartTheme) {
   return [
-    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
-    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle },
+    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle(theme) },
+    { type: "value" as const, splitLine: { lineStyle: { color: theme.axis.splitLineColor } }, ...sharedAxisStyle(theme) },
   ];
 }
 
-export function chartToOption(contract: ChartContract): EChartsOption {
+export function chartToOption(contract: ChartContract, themeName: ChartThemeName = "dark"): EChartsOption {
   const { chart_type, data } = contract;
-  const option = baseOption();
+  const theme = themeFor(themeName);
+  const option = baseOption(theme);
 
   switch (chart_type) {
     case "pie": {
       if (data.kind !== "pie") throw new Error(`pie requires pie data (got ${data.kind})`);
       return {
         ...option,
-        tooltip: { trigger: "item" },
+        tooltip: tooltipFor("item", theme),
         legend: { ...theme.legend },
         series: [
           {
@@ -73,13 +94,14 @@ export function chartToOption(contract: ChartContract): EChartsOption {
     case "bar":
     case "column": {
       if (data.kind !== "categorical") throw new Error(`${chart_type} requires categorical data (got ${data.kind})`);
+      const [xAxis, yAxis] = categoryAxes(data.categories, theme);
       return {
         ...option,
-        tooltip: { trigger: "axis" },
+        tooltip: tooltipFor("axis", theme),
         legend: { ...theme.legend },
         grid: { ...theme.grid },
-        xAxis: categoryAxes(data.categories)[0],
-        yAxis: categoryAxes(data.categories)[1],
+        xAxis,
+        yAxis,
         series: data.series.map((s) => ({
           name: s.name,
           type: "bar" as const,
@@ -92,13 +114,14 @@ export function chartToOption(contract: ChartContract): EChartsOption {
     case "line":
     case "area": {
       if (data.kind !== "line") throw new Error(`${chart_type} requires line data (got ${data.kind})`);
+      const [xAxis, yAxis] = lineAxes(data.x, theme);
       return {
         ...option,
-        tooltip: { trigger: "axis" },
+        tooltip: tooltipFor("axis", theme),
         legend: { ...theme.legend },
         grid: { ...theme.grid },
-        xAxis: lineAxes(data.x)[0],
-        yAxis: lineAxes(data.x)[1],
+        xAxis,
+        yAxis,
         series: data.series.map((s) => ({
           name: s.name,
           type: "line" as const,
@@ -111,13 +134,14 @@ export function chartToOption(contract: ChartContract): EChartsOption {
     }
     case "scatter": {
       if (data.kind !== "scatter") throw new Error(`scatter requires scatter data (got ${data.kind})`);
+      const [xAxis, yAxis] = valueAxes(theme);
       return {
         ...option,
-        tooltip: { trigger: "item" },
+        tooltip: tooltipFor("item", theme),
         legend: { ...theme.legend },
         grid: { ...theme.grid },
-        xAxis: valueAxes()[0],
-        yAxis: valueAxes()[1],
+        xAxis,
+        yAxis,
         series: data.series.map((s) => ({
           name: s.name,
           type: "scatter" as const,

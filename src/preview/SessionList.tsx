@@ -122,7 +122,7 @@ export function SessionList() {
 
           <aside className="aur-connect">
             <div className="aur-connect__head">
-              <Icon name="uil:plug" size={17} color="#9575cd" />
+              <Icon name="uil:plug" size={17} color="var(--agent-a)" />
               <span className="aur-connect__title">Connect an Agent</span>
             </div>
             <p className="aur-connect__sub">One-time install. Aurora binds to localhost only, so the endpoint never changes.</p>

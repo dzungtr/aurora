@@ -10,6 +10,7 @@
     "labelColor": "#a9b1d6",
     "splitLineColor": "#24283b"
   },
+  "tooltip": { "backgroundColor": "#2a2a2a", "borderColor": "#3a3a3a", "textColor": "#e8e8e8" },
   "bar": { "borderRadius": 3, "barMaxWidth": 40 },
   "line": { "width": 2, "pointSize": 6 },
   "pie": { "radius": "62%", "center": ["50%", "55%"] }
