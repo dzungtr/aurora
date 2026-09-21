@@ -16,10 +16,10 @@ export function PreviewApp() {
   useEffect(() => setViewingSession(viewing), [viewing]);
   const surface = viewing ? <StackView key={`${viewing}/${route!.aid ?? ""}`} sessionId={viewing} artifactId={route!.aid} /> : <SessionList />;
   return (
-    <>
+    <div className="aur" data-theme="dark">
       {surface}
       {/* Pushes to other sessions surface as a badge/toast, never a navigation. */}
       <LiveToast viewingSessionId={viewing ?? undefined} />
-    </>
+    </div>
   );
 }
