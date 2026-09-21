@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
+import { ThemeToggle } from "./ThemeToggle";
 import type { Layout } from "../App";
 import { totalUnread, useUnreadCounts } from "../preview/unreadStore";
 
@@ -51,6 +52,8 @@ export function TopBar({ filter, onFilter, layout, onLayout, onNewFile, onNewFol
         <button className={layout === "workspace" ? "is-active" : ""} onClick={() => onLayout("workspace")}>Workspace</button>
         <button className={layout === "focus" ? "is-active" : ""} onClick={() => onLayout("focus")}>Focus</button>
       </div>
+
+      <ThemeToggle />
 
       <div className="aur-newmenu">
         <button className="aur-btn" onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}>

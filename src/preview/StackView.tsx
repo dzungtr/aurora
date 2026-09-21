@@ -24,6 +24,7 @@ import { Icon } from "../components/Icon";
 import { PreviewTopBar } from "./PreviewTopBar";
 import { getFollow, setFollow } from "./followStore";
 import { useUnreadCounts } from "./unreadStore";
+import { useTheme, type Theme } from "../lib/themeStore";
 
 export interface StackViewProps {
   sessionId: string;
@@ -31,16 +32,17 @@ export interface StackViewProps {
   artifactId?: string;
 }
 
-const TYPE_META: Record<string, { label: string; icon: string; color: string }> = {
-  markdown: { label: "Markdown", icon: "uil:file-alt", color: "#64b5f6" },
-  chart: { label: "Chart", icon: "uil:chart", color: "#9575cd" },
-  mermaid: { label: "Diagram", icon: "uil:sitemap", color: "#4db6ac" },
-  image: { label: "Image", icon: "uil:image", color: "#ffb74d" },
-  video: { label: "Video", icon: "uil:video", color: "#f06292" },
+const TYPE_META: Record<string, { label: string; icon: string; dark: string; light: string }> = {
+  markdown: { label: "Markdown", icon: "uil:file-alt", dark: "#64b5f6", light: "#1565c0" },
+  chart: { label: "Chart", icon: "uil:chart", dark: "#9575cd", light: "#5e35b1" },
+  mermaid: { label: "Diagram", icon: "uil:sitemap", dark: "#4db6ac", light: "#00796b" },
+  image: { label: "Image", icon: "uil:image", dark: "#ffb74d", light: "#ef6c00" },
+  video: { label: "Video", icon: "uil:video", dark: "#f06292", light: "#c2185b" },
 };
 
-function typeMeta(type: string) {
-  return TYPE_META[type] ?? { label: type, icon: "uil:file", color: "#9e9e9e" };
+function typeMeta(type: string, theme: Theme) {
+  const m = TYPE_META[type] ?? { label: type, icon: "uil:file", dark: "#9e9e9e", light: "#757575" };
+  return { label: m.label, icon: m.icon, color: theme === "light" ? m.light : m.dark };
 }
 
 function fmtActivity(iso: string): string {
@@ -78,6 +80,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const aliveRef = useRef(true);
   const unread = useUnreadCounts();
+  const theme = useTheme();
   useEffect(() => () => { aliveRef.current = false; clearTimeout(copyTimer.current); }, []);
 
   // All sessions, for the left rail. Refreshed on every live event so counts
@@ -181,7 +184,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
   const sessionMeta = sessions?.find((s) => s.session_id === sessionId);
   const sessionTitle = sessionMeta?.title ?? sessionId;
   const isReplaced = !!current && current.updated_at !== current.created_at;
-  const t = current ? typeMeta(current.type) : null;
+  const t = current ? typeMeta(current.type, theme) : null;
   const stackItems = artifacts ? artifacts.map((a, i) => ({ a, num: i + 1 })).slice().reverse() : [];
 
   return (
@@ -306,7 +309,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
                       <MermaidArtifact content={current.content} />
                     </div>
                     <div className="aur-stack3__caption aur-stack3__captionmono">
-                      push_mermaid · rendered client-side, dark theme
+                      push_mermaid · rendered client-side, house theme
                     </div>
                   </div>
                 ) : current.type === "image" || current.type === "video" ? (
@@ -334,7 +337,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
           </div>
           <div className="aur-stack3__sidelist">
             {stackItems.map(({ a, num }) => {
-              const m = typeMeta(a.type);
+              const m = typeMeta(a.type, theme);
               return (
                 <a
                   key={a.artifact_id}

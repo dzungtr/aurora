@@ -12,6 +12,7 @@ import { Icon } from "./components/Icon";
 import { PreviewApp } from "./preview/PreviewApp";
 import { parsePreviewPath, onRouteChange } from "./preview/previewApi";
 import { startLiveSocket } from "./preview/liveSocket";
+import { useTheme } from "./lib/themeStore";
 
 export type Layout = "workspace" | "focus";
 
@@ -61,6 +62,7 @@ export function App() {
 }
 
 function ExplorerApp() {
+  const theme = useTheme();
   const [entries, setEntries] = useState<TreeEntry[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [openTabs, setOpenTabs] = useState<string[]>([]);
@@ -238,7 +240,7 @@ function ExplorerApp() {
 
   /* --------------------------------- Render --------------------------------- */
   return (
-    <div className="aur" data-theme="dark">
+    <div className="aur" data-theme={theme}>
       <TopBar
         filter={filter}
         onFilter={setFilter}

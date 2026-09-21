@@ -1,0 +1,17 @@
+{
+  "colors": ["#3e6bd8", "#2f8f3c", "#c94f63", "#b3690a", "#7c4dbd", "#0f8fa3", "#c2650f", "#2f8f7f"],
+  "backgroundColor": "transparent",
+  "textStyle": { "color": "#333333", "fontFamily": "Inter, system-ui, sans-serif", "fontSize": 13 },
+  "title": { "show": false },
+  "legend": { "top": 0, "itemWidth": 10, "itemHeight": 10, "textStyle": { "color": "#333333", "fontSize": 12 } },
+  "grid": { "left": 16, "right": 16, "top": 40, "bottom": 8, "containLabel": true },
+  "axis": {
+    "lineColor": "#d9d9d9",
+    "labelColor": "#808080",
+    "splitLineColor": "#ececec"
+  },
+  "tooltip": { "backgroundColor": "#ffffff", "borderColor": "#e5e5e5", "textColor": "#222222" },
+  "bar": { "borderRadius": 3, "barMaxWidth": 40 },
+  "line": { "width": 2, "pointSize": 6 },
+  "pie": { "radius": "62%", "center": ["50%", "55%"] }
+}
