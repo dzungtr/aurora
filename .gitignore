@@ -2,4 +2,4 @@ node_modules
 *.log
 .DS_Store
 .worktrees/
-/zui-explorer
+/aurora

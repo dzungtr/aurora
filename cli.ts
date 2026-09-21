@@ -11,7 +11,7 @@ function parseArgs(argv: string[]) {
     if (arg === "--port") {
       const value = Number(args[++i]);
       if (Number.isNaN(value)) {
-        console.error("Usage: zui-explorer <path> [--port <port>]");
+        console.error("Usage: aurora <path> [--port <port>]");
         process.exit(1);
       }
       port = value;
@@ -21,7 +21,7 @@ function parseArgs(argv: string[]) {
   }
   const rootDir = positional[0];
   if (!rootDir) {
-    console.error("Usage: zui-explorer <path> [--port <port>]");
+    console.error("Usage: aurora <path> [--port <port>]");
     process.exit(1);
   }
   return { rootDir: resolve(rootDir), port };
@@ -29,4 +29,4 @@ function parseArgs(argv: string[]) {
 
 const { rootDir, port } = parseArgs(process.argv);
 const server = createServer(rootDir, port);
-console.log(`zui-explorer serving ${rootDir} at http://localhost:${server.port}`);
+console.log(`aurora serving ${rootDir} at http://localhost:${server.port}`);

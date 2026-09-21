@@ -14,7 +14,7 @@ let base: string;
 const TEST_PORT = 5270;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "zui-explorer-server-"));
+  root = mkdtempSync(join(tmpdir(), "aurora-server-"));
   writeFileSync(join(root, "hello.txt"), "hi");
   server = createServer(root, TEST_PORT);
   base = `http://localhost:${TEST_PORT}`;

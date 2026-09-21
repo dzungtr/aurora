@@ -1,5 +1,5 @@
 // HTTP client for the file-explorer backend.
-// Matches the existing zui-explorer server contract (/api/tree, /api/file, ...).
+// Matches the existing aurora server contract (/api/tree, /api/file, ...).
 // `size` and `mtime` are optional — see README for the small server.ts change
 // that populates them so the Inspector can show real metadata.
 

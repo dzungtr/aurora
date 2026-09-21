@@ -8,7 +8,7 @@ import { resolveSafe, PathTraversalError } from "./fsSafe";
 let root: string;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "zui-explorer-test-"));
+  root = mkdtempSync(join(tmpdir(), "aurora-test-"));
   mkdirSync(join(root, "a", "b"), { recursive: true });
   writeFileSync(join(root, "a", "b", "c.txt"), "hello");
 });
@@ -38,7 +38,7 @@ describe("resolveSafe", () => {
   });
 
   it("rejects a symlink that escapes root", () => {
-    const outside = mkdtempSync(join(tmpdir(), "zui-explorer-outside-"));
+    const outside = mkdtempSync(join(tmpdir(), "aurora-outside-"));
     writeFileSync(join(outside, "secret.txt"), "nope");
     symlinkSync(outside, join(root, "escape-link"));
     expect(() => resolveSafe(root, "escape-link/secret.txt")).toThrow(PathTraversalError);

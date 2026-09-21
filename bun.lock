@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "zui-explorer",
+      "name": "aurora",
       "dependencies": {
         "@iconify/react": "^5.0.2",
         "@modelcontextprotocol/sdk": "^1.30.0",
