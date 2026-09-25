@@ -552,6 +552,12 @@
 }
 .aur-stack3__railmeta { margin-left: 22px; margin-top: 3px; font-size: 11px; color: var(--text-light); }
 
+/* Collapsed sidebar strips: thin vertical rail with a re-expand button. */
+.aur-stack3__strip { width: 26px; flex: none; display: flex; align-items: flex-start; justify-content: center; padding-top: 12px; background: var(--e1); border-right: 1px solid var(--border); }
+.aur-stack3__strip:last-child { border-right: none; border-left: 1px solid var(--border); }
+.aur-stack3__stripbtn { width: 22px; height: 40px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); background: var(--e0); color: var(--text-light); border-radius: 6px; cursor: pointer; padding: 0; }
+.aur-stack3__stripbtn:hover { color: var(--text); border-color: var(--hair-strong); }
+
 .aur-stack3__main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--e0); }
 .aur-stack3__sessionhead { height: 50px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border); }
 .aur-stack3__sessiontitle { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
@@ -593,6 +599,9 @@
 
 .aur-stack3__side { width: 236px; flex: none; display: flex; flex-direction: column; background: var(--e1); border-left: 1px solid var(--border); }
 .aur-stack3__sidehead { height: 50px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--border); }
+.aur-stack3__sideheadright { display: flex; align-items: center; gap: 6px; }
+.aur-stack3__sideiconbtn { width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center; border: none; background: transparent; color: var(--text-light); border-radius: 5px; cursor: pointer; padding: 0; }
+.aur-stack3__sideiconbtn:hover { color: var(--text); background: var(--hover); }
 .aur-stack3__sidecount { font-size: 11px; color: var(--text-light); font-variant-numeric: tabular-nums; }
 .aur-stack3__sidelist { flex: 1; overflow-y: auto; padding: 10px; }
 .aur-stack3__sideitem {
