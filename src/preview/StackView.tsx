@@ -23,6 +23,7 @@ import { MermaidArtifact } from "./MermaidArtifact";
 import { Icon } from "../components/Icon";
 import { PreviewTopBar } from "./PreviewTopBar";
 import { getFollow, setFollow } from "./followStore";
+import { getSidebar, setSidebar, subscribeSidebar, type SidebarState } from "./sidebarStore";
 import { useUnreadCounts } from "./unreadStore";
 import { useTheme, type Theme } from "../lib/themeStore";
 
@@ -77,10 +78,14 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [follow, setFollowState] = useState(() => getFollow(sessionId));
   const [copied, setCopied] = useState(false);
+  const [sidebar, setSidebarState] = useState<SidebarState>(() => getSidebar());
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const aliveRef = useRef(true);
   const unread = useUnreadCounts();
   const theme = useTheme();
+  // Keep the sidebar toggles in sync with the persisted store (module-level
+  // singleton — this component is re-keyed on every navigation).
+  useEffect(() => subscribeSidebar(() => setSidebarState(getSidebar())), []);
   useEffect(() => () => { aliveRef.current = false; clearTimeout(copyTimer.current); }, []);
 
   // All sessions, for the left rail. Refreshed on every live event so counts
@@ -162,6 +167,8 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
     });
   }, [sessionId, current, follow]);
 
+  const toggleSidebar = (side: keyof SidebarState) => setSidebar({ [side]: !sidebar[side] });
+
   const toggleFollow = () => {
     const next = !follow;
     setFollow(sessionId, next);
@@ -192,7 +199,8 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
       <PreviewTopBar />
 
       <div className="aur-stack3">
-        {/* LEFT: SESSION RAIL */}
+        {/* LEFT: SESSION RAIL (collapsible) */}
+        {sidebar.left ? (
         <aside className="aur-stack3__rail">
           <a className="aur-stack3__railback" href="/preview">
             <Icon name="uil:angle-left" size={17} /> All sessions
@@ -220,10 +228,25 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
             })}
           </div>
         </aside>
+        ) : (
+        <div className="aur-stack3__strip">
+          <button className="aur-stack3__stripbtn" onClick={() => toggleSidebar("left")} title="Show sessions" aria-label="Show sessions">
+            <Icon name="uil:angle-right" size={18} />
+          </button>
+        </div>
+        )}
 
         {/* CENTER */}
         <main className="aur-stack3__main">
           <div className="aur-stack3__sessionhead">
+            <button
+              className="aur-stack3__iconbtn"
+              onClick={() => toggleSidebar("left")}
+              title="Collapse sessions sidebar"
+              aria-label="Collapse sessions sidebar"
+            >
+              <Icon name="uil:angle-left" size={17} />
+            </button>
             <span className="aur-stack3__sessiontitle">{sessionTitle}</span>
             <button
               className={"aur-stack3__ghostbtn" + (follow ? " is-on" : "")}
@@ -327,12 +350,23 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
           </div>
         </main>
 
-        {/* RIGHT: ARTIFACT STACK */}
+        {/* RIGHT: ARTIFACT STACK (collapsible) */}
+        {sidebar.right ? (
         <aside className="aur-stack3__side">
           <div className="aur-stack3__sidehead">
             <span className="aur-overline">Stack</span>
-            <span className="aur-stack3__sidecount">
-              {artifacts ? `${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"}` : ""}
+            <span className="aur-stack3__sideheadright">
+              <span className="aur-stack3__sidecount">
+                {artifacts ? `${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"}` : ""}
+              </span>
+              <button
+                className="aur-stack3__sideiconbtn"
+                onClick={() => toggleSidebar("right")}
+                title="Collapse stack sidebar"
+                aria-label="Collapse stack sidebar"
+              >
+                <Icon name="uil:angle-right" size={17} />
+              </button>
             </span>
           </div>
           <div className="aur-stack3__sidelist">
@@ -358,6 +392,13 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
           </div>
           <div className="aur-stack3__sidefoot">Newest on top. New pushes slide on here live.</div>
         </aside>
+        ) : (
+        <div className="aur-stack3__strip" title="Show stack">
+          <button className="aur-stack3__stripbtn" onClick={() => toggleSidebar("right")} title="Show stack" aria-label="Show stack">
+            <Icon name="uil:angle-left" size={18} />
+          </button>
+        </div>
+        )}
       </div>
     </div>
   );
