@@ -114,7 +114,7 @@ export async function handleMcpRequest(
     sessionIdGenerator: undefined,
   });
   const server = new McpServer(
-    { name: "aurora", version: "0.1.0" },
+    { name: "aurora", version: "0.2.0" },
     { capabilities: { tools: {} } }
   );
 
