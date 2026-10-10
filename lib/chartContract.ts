@@ -41,7 +41,15 @@ export type LineData = z.infer<typeof lineDataSchema>;
 export const scatterDataSchema = z.object({
   kind: z.literal("scatter"),
   series: z
-    .array(z.object({ name: z.string().min(1), points: z.array(z.tuple([z.number(), z.number()])).min(1) }))
+    .array(
+      z.object({
+        name: z.string().min(1),
+        // Note: an (x, y) pair is expressed as an array of exactly two numbers
+        // rather than z.tuple — zod's tuple emits draft-07 positional `items`
+        // + `additionalItems`, which JSON Schema draft 2020-12 rejects.
+        points: z.array(z.array(z.number()).length(2)).min(1),
+      }),
+    )
     .min(1),
 });
 export type ScatterData = z.infer<typeof scatterDataSchema>;

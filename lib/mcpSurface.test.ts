@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -37,6 +37,47 @@ afterAll(() => {
 });
 
 describe("MCP endpoint /mcp", () => {
+  it("every tool inputSchema validates under JSON Schema draft 2020-12", async () => {
+    // Regression: a draft-07 tuple `items` array (from z.tuple) is invalid in
+    // draft 2020-12; Anthropic rejects the whole request when any tool schema
+    // is invalid. Validate every exposed tool schema with Python's
+    // Draft202012Validator.check_schema.
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+    await client.close();
+    expect(tools.length).toBeGreaterThan(0);
+
+    const script = `
+import json, sys
+from jsonschema import Draft202012Validator
+with open(sys.argv[1]) as f:
+    schemas = json.load(f)
+failures = []
+for name, schema in schemas.items():
+    try:
+        Draft202012Validator.check_schema(schema)
+    except Exception as e:
+        failures.append(f"{name}: {e}")
+if failures:
+    print("\\n".join(failures), file=sys.stderr)
+    sys.exit(1)
+`;
+    const schemasPath = join(tmpdir(), `aurora-tool-schemas-${Date.now()}.json`);
+    writeFileSync(
+      schemasPath,
+      JSON.stringify(Object.fromEntries(tools.map((t) => [t.name, t.inputSchema])))
+    );
+    try {
+      const proc = Bun.spawnSync(["python3", "-c", script, schemasPath]);
+      const stderr = new TextDecoder().decode(proc.stderr);
+      expect(stderr, stderr).toBe("");
+      expect(proc.exitCode).toBe(0);
+    } finally {
+      rmSync(schemasPath, { force: true });
+    }
+  });
+
   it("binds loopback only and lists push_markdown", async () => {
     expect(server.hostname).toBe("127.0.0.1");
     const { client, transport } = makeClient();
