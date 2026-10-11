@@ -16,6 +16,10 @@ export interface WhitelistModelEntry {
   resolutions?: string[];
   aspect_ratios?: string[];
   qualities?: string[];
+  /** Video models: supported durations in seconds */
+  durations?: number[];
+  /** Video models: whether the model can generate audio alongside video */
+  supports_audio?: boolean;
 }
 
 export interface GenerationWhitelist {
@@ -28,7 +32,7 @@ export interface ModelCatalogInfo {
   priceHint?: string;
 }
 
-/** Cheap-tier defaults: one fast image model; video stays empty until #26. */
+/** Cheap-tier defaults: one fast image model and one cheap video model. */
 export const DEFAULT_WHITELIST: GenerationWhitelist = {
   image: [
     {
@@ -37,7 +41,17 @@ export const DEFAULT_WHITELIST: GenerationWhitelist = {
       default: true,
     },
   ],
-  video: [],
+  video: [
+    {
+      id: "x-ai/grok-imagine-video-1.5-lite",
+      note: "cheap-tier video generation",
+      default: true,
+      durations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      resolutions: ["480p", "720p", "1080p"],
+      aspect_ratios: ["16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3"],
+      supports_audio: true,
+    },
+  ],
 };
 
 /** Default config file location; the whitelist module reads it per request. */
@@ -56,6 +70,8 @@ function normalizeEntry(raw: unknown): WhitelistModelEntry | null {
       resolutions: e.resolutions,
       aspect_ratios: e.aspect_ratios,
       qualities: e.qualities,
+      durations: Array.isArray(e.durations) ? e.durations : undefined,
+      supports_audio: typeof e.supports_audio === "boolean" ? e.supports_audio : undefined,
     };
   }
   return null;
@@ -113,6 +129,29 @@ function formatPriceHint(entry: WhitelistModelEntry, catalog: Map<string, ModelC
 }
 
 /**
+ * Build the create_video tool description with live per-second price hints
+ * from the (best-effort) video catalog, falling back to static notes offline.
+ */
+export function buildVideoToolDescription(
+  whitelist: GenerationWhitelist,
+  catalog: Map<string, ModelCatalogInfo> = new Map()
+): string {
+  const hints = whitelist.video
+    .map((m) => `${m.id}${formatPriceHint(m, catalog)}${m.default ? " [default]" : ""}`)
+    .join("; ");
+  return (
+    "Generate one short video from a text prompt via OpenRouter. Submit-and-notify: " +
+    "returns a job id immediately; a background poller pushes the finished video " +
+    "artifact into the session when the provider completes (or a visible failure " +
+    "artifact when it fails, is cancelled, or expires). Model per-second prices at " +
+    "build of this description: " +
+    hints +
+    ". Optional duration/resolution/aspect_ratio/generate_audio are validated " +
+    "against the model's capabilities before submission."
+  );
+}
+
+/**
  * Build the create_image tool description with live price hints from the
  * (best-effort) catalog, falling back to static notes offline.
  */
@@ -129,6 +168,43 @@ export function buildImageToolDescription(
     hints +
     ". Optional resolution/aspect_ratio/quality are validated against the model's capabilities before submission."
   );
+}
+
+/** Video generation params subject to pre-flight validation. */
+export interface VideoGenerationParams {
+  duration?: number;
+  resolution?: string;
+  aspect_ratio?: string;
+  generate_audio?: boolean;
+}
+
+/**
+ * Pre-flight validation of create_video params against the model's whitelist
+ * entry caps (operator-curated config/defaults; the OpenRouter catalog carries
+ * pricing only — PRD #24 amendment 2026-10-11). Returns an actionable error,
+ * or null when acceptable.
+ */
+export function videoPreflightError(entry: WhitelistModelEntry, params: VideoGenerationParams): string | null {
+  if (params.duration !== undefined) {
+    if (!entry.durations || !entry.durations.includes(params.duration)) {
+      return (
+        `model ${entry.id} does not support duration ${params.duration}s. ` +
+        `Allowed: ${(entry.durations ?? []).join(", ")}`
+      );
+    }
+  }
+  if (params.resolution !== undefined) {
+    const err = preflightParamError(entry, "resolutions", params.resolution);
+    if (err) return err;
+  }
+  if (params.aspect_ratio !== undefined) {
+    const err = preflightParamError(entry, "aspect_ratios", params.aspect_ratio);
+    if (err) return err;
+  }
+  if (params.generate_audio === true && entry.supports_audio === false) {
+    return `model ${entry.id} does not support audio generation`;
+  }
+  return null;
 }
 
 /**

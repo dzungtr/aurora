@@ -7,15 +7,18 @@ import { artifactEvent, type LiveBus } from "./liveBus";
 import { CHART_TYPES, chartContractError, chartPushSchema } from "./chartContract";
 import {
   buildImageToolDescription,
+  buildVideoToolDescription,
   defaultGenerationConfigPath,
   loadWhitelist,
   modelIds,
   preflightParamError,
+  videoPreflightError,
   type GenerationWhitelist,
   type ModelCatalogInfo,
   type WhitelistModelEntry,
 } from "./whitelist";
 import { OpenRouterClient } from "./openrouter";
+import type { VideoJobService } from "./videoGeneration";
 
 /**
  * Generation configuration injected through server options. The whitelist is
@@ -28,6 +31,14 @@ export interface GenerationOptions {
   whitelistPath?: string;
   /** Shared, mutable: startup catalog enrichment writes price hints here */
   catalog?: Map<string, ModelCatalogInfo>;
+  /** SQLite job registry location (default ~/.local/share/aurora/generations.db) */
+  dbPath?: string;
+  /** Poller cadence override (tests; default 30s per PRD #24) */
+  pollIntervalMs?: number;
+  /** Pending-job ceiling override (tests; default 15 minutes) */
+  jobCeilingMs?: number;
+  /** Constructed by the server at boot; create_video is registered only with one */
+  videoService?: VideoJobService;
 }
 
 function resolveWhitelist(generation: GenerationOptions): GenerationWhitelist {
@@ -106,6 +117,81 @@ function registerCreateImageTool(
             deep_link,
             model,
             cost: generated.cost,
+          },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+}
+
+function registerCreateVideoTool(
+  server: McpServer,
+  store: ArtifactStore,
+  baseUrl: string,
+  liveBus: LiveBus | undefined,
+  generation: GenerationOptions
+) {
+  const whitelist = resolveWhitelist(generation);
+  const service = generation.videoService!;
+  server.registerTool(
+    "create_video",
+    {
+      title: "Generate video",
+      description: buildVideoToolDescription(whitelist, generation.catalog),
+      inputSchema: {
+        session_id: ID_SCHEMA.describe("Session id; agent-minted, unique per agent run"),
+        title: z.string().min(1).describe("Human-visible artifact title"),
+        prompt: z.string().min(1).describe("Text prompt describing the video to generate"),
+        model: z
+          .enum(modelIds(whitelist.video) as [string, ...string[]])
+          .describe("OpenRouter video model from the active whitelist"),
+        duration: z.number().int().positive().optional().describe("Video duration in seconds, validated against the model's capabilities"),
+        resolution: z.string().optional().describe("Resolution hint, validated against the model's capabilities"),
+        aspect_ratio: z.string().optional().describe("Aspect ratio hint, validated against the model's capabilities"),
+        generate_audio: z.boolean().optional().describe("Generate audio alongside the video"),
+        artifact_id: OPTIONAL_ID_SCHEMA,
+        session_title: SESSION_TITLE_SCHEMA,
+      },
+    },
+    async ({ session_id, title, prompt, model, duration, resolution, aspect_ratio, generate_audio, artifact_id, session_title }) => {
+      try {
+        // Pre-flight validation against the model's whitelist entry caps for
+        // actionable errors instead of upstream 400s (PRD #24 story 16).
+        const entry: WhitelistModelEntry | undefined = resolveWhitelist(generation).video.find(
+          (m) => m.id === model
+        );
+        if (!entry) return toolError(`model ${model} is not on the active whitelist`);
+        const preflightError = videoPreflightError(entry, { duration, resolution, aspect_ratio, generate_audio });
+        if (preflightError) return toolError(preflightError);
+        // Immediate response: registry row is pending before we return; the
+        // background poller owns everything after this point.
+        const job = await service.submit({
+          session_id,
+          target_artifact_id: artifact_id,
+          title,
+          model,
+          prompt,
+          duration,
+          resolution,
+          aspect_ratio,
+          generate_audio,
+        });
+        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
+        const priceHint = generation.catalog?.get(model)?.priceHint ?? entry.note;
+        const text =
+          `Submitted video generation job ${job.job_id} with ${model}` +
+          (priceHint ? ` (~${priceHint})` : "") +
+          `. It will appear in session ${session_id} when complete. Preview: ${deep_link}`;
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: {
+            session_id,
+            job_id: job.job_id,
+            deep_link,
+            model,
+            price_hint: priceHint,
           },
         };
       } catch (err) {
@@ -311,6 +397,11 @@ export async function handleMcpRequest(
   // configured (env var read once at server start, or injected via options).
   if (generation?.apiKey) {
     registerCreateImageTool(server, store, baseUrl, liveBus, generation);
+    // The video tool needs the boot-owned poller service (submit-and-notify);
+    // it also needs at least one whitelisted video model for a valid enum.
+    if (generation.videoService && modelIds(resolveWhitelist(generation).video).length > 0) {
+      registerCreateVideoTool(server, store, baseUrl, liveBus, generation);
+    }
   }
 
   server.registerTool(

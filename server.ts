@@ -5,7 +5,9 @@ import { homedir } from "node:os";
 import { ArtifactStore, InvalidArtifactIdError } from "./lib/artifactStore";
 import { LiveBus } from "./lib/liveBus";
 import { handleMcpRequest, type GenerationOptions } from "./lib/mcpSurface";
-import { OpenRouterClient, priceHintForEntry } from "./lib/openrouter";
+import { OpenRouterClient, priceHintForEntry, videoPriceHintForEntry } from "./lib/openrouter";
+import { JobRegistry } from "./lib/jobRegistry";
+import { VideoJobService } from "./lib/videoGeneration";
 import { readdir, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import pdfWorkerPath from "pdfjs-dist/build/pdf.worker.min.mjs" with { type: "file" };
@@ -83,7 +85,45 @@ function startCatalogRefresh(generation: GenerationOptions): void {
     } catch (err) {
       console.error("generation catalog fetch unavailable; using static notes:", err);
     }
+    try {
+      // Video models carry per-second pricing in a dedicated catalog endpoint.
+      const videoEntries = await client.fetchVideoModelCatalog();
+      const catalog = (generation.catalog ??= new Map());
+      for (const entry of videoEntries) {
+        const hint = videoPriceHintForEntry(entry);
+        if (hint) catalog.set(entry.id, { priceHint: hint });
+      }
+    } catch (err) {
+      console.error("video catalog fetch unavailable; using static notes:", err);
+    }
   })();
+}
+
+/**
+ * Boot the async video job infrastructure: SQLite registry (injectable path),
+ * poller service, and recovery of pending jobs from a previous run so
+ * already-billed jobs still land after a restart (ADR-0004).
+ */
+function startVideoJobService(generation: GenerationOptions, store: ArtifactStore, liveBus: LiveBus): void {
+  try {
+    const client = new OpenRouterClient({ apiKey: generation.apiKey, baseUrl: generation.baseUrl });
+    const registry = new JobRegistry(generation.dbPath ?? join(homedir(), ".local/share/aurora/generations.db"));
+    const service = new VideoJobService({
+      client,
+      registry,
+      store,
+      liveBus,
+      pollIntervalMs: generation.pollIntervalMs,
+      ceilingMs: generation.jobCeilingMs,
+      log: (m) => console.error(`video job service: ${m}`),
+    });
+    generation.videoService = service;
+    service.recoverPending();
+  } catch (err) {
+    // An unusable registry (unwritable data dir) disables create_video only;
+    // synchronous generation tools keep working.
+    console.error("video job registry unavailable; create_video disabled:", err);
+  }
 }
 
 export function createServer(rootDir: string, port: number, options: ServerOptions = {}) {
@@ -94,7 +134,10 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
   if (generation === undefined && process.env.OPENROUTER_API_KEY) {
     generation = { apiKey: process.env.OPENROUTER_API_KEY, baseUrl: "https://openrouter.ai/api/v1" };
   }
-  if (generation) startCatalogRefresh(generation);
+  if (generation) {
+    startCatalogRefresh(generation);
+    startVideoJobService(generation, artifactStore, liveBus);
+  }
   const externalPort = process.env.AURORA_PUBLIC_PORT ? Number(process.env.AURORA_PUBLIC_PORT) : port;
   return Bun.serve({
     port,
