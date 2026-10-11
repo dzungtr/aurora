@@ -2,7 +2,7 @@ import type { ArtifactStore } from "./artifactStore";
 import type { LiveBus } from "./liveBus";
 import { artifactEvent } from "./liveBus";
 import type { JobRecord, JobRegistry } from "./jobRegistry";
-import type { OpenRouterClient } from "./openrouter";
+import type { OpenRouterClient, VideoFrameImage } from "./openrouter";
 
 /**
  * Submit-and-notify video generation service (ADR-0004). `create_video` calls
@@ -71,6 +71,10 @@ export class VideoJobService {
     resolution?: string;
     aspect_ratio?: string;
     generate_audio?: boolean;
+    /** Style references (inline data URLs), routed to input_references */
+    inputReferences?: string[];
+    /** First/last frame images, routed to frame_images */
+    frameImages?: VideoFrameImage[];
   }): Promise<JobRecord> {
     const submitted = await this.options.client.submitVideo({
       model: input.model,
@@ -79,6 +83,8 @@ export class VideoJobService {
       resolution: input.resolution,
       aspect_ratio: input.aspect_ratio,
       generate_audio: input.generate_audio,
+      inputReferences: input.inputReferences,
+      frameImages: input.frameImages,
     });
     const job = this.options.registry.createJob({
       job_id: submitted.jobId,

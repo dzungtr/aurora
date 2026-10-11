@@ -19,6 +19,7 @@ import {
 } from "./whitelist";
 import { OpenRouterClient } from "./openrouter";
 import type { JobRegistry } from "./jobRegistry";
+import { resolveReference, type ReferenceInput } from "./referenceResolver";
 import type { VideoJobService } from "./videoGeneration";
 
 /**
@@ -52,6 +53,7 @@ function registerCreateImageTool(
   server: McpServer,
   store: ArtifactStore,
   baseUrl: string,
+  mediaSizeCap: number,
   liveBus: LiveBus | undefined,
   generation: GenerationOptions
 ) {
@@ -72,11 +74,16 @@ function registerCreateImageTool(
         resolution: z.string().optional().describe("Resolution hint, validated against the model's capabilities"),
         aspect_ratio: z.string().optional().describe("Aspect ratio hint, validated against the model's capabilities"),
         quality: z.string().optional().describe("Quality hint, validated against the model's capabilities"),
+        references: z
+          .array(REFERENCE_SCHEMA)
+          .max(MAX_REFERENCES)
+          .optional()
+          .describe("Optional reference images for image-to-image generation; resolved to inline data URLs server-side"),
         artifact_id: OPTIONAL_ID_SCHEMA,
         session_title: SESSION_TITLE_SCHEMA,
       },
     },
-    async ({ session_id, title, prompt, model, artifact_id, session_title, resolution, aspect_ratio, quality }) => {
+    async ({ session_id, title, prompt, model, artifact_id, session_title, resolution, aspect_ratio, quality, references }) => {
       try {
         // Pre-flight: validate optional params for actionable errors instead of
         // upstream 400s (PRD #24 story 16). Caps come from the operator-curated
@@ -97,7 +104,14 @@ function registerCreateImageTool(
           const err = preflightParamError(entry, key, value);
           if (err) return toolError(err);
         }
-        const generated = await client.generateImage({ model, prompt, resolution, aspect_ratio, quality });
+        const generated = await client.generateImage({
+          model,
+          prompt,
+          references: await resolveReferences(references as ReferenceInput[] | undefined, store, mediaSizeCap),
+          resolution,
+          aspect_ratio,
+          quality,
+        });
         const image = generated.images[0];
         const result = await store.pushMedia({
           session_id,
@@ -153,6 +167,7 @@ function registerCreateVideoTool(
   server: McpServer,
   store: ArtifactStore,
   baseUrl: string,
+  mediaSizeCap: number,
   liveBus: LiveBus | undefined,
   generation: GenerationOptions
 ) {
@@ -174,11 +189,18 @@ function registerCreateVideoTool(
         resolution: z.string().optional().describe("Resolution hint, validated against the model's capabilities"),
         aspect_ratio: z.string().optional().describe("Aspect ratio hint, validated against the model's capabilities"),
         generate_audio: z.boolean().optional().describe("Generate audio alongside the video"),
+        references: z
+          .array(REFERENCE_SCHEMA.extend({ role: REFERENCE_ROLES.optional() }))
+          .max(MAX_REFERENCES)
+          .optional()
+          .describe(
+            "Optional image references; role `style` (default) guides style, `first_frame`/`last_frame` set image-to-video frames"
+          ),
         artifact_id: OPTIONAL_ID_SCHEMA,
         session_title: SESSION_TITLE_SCHEMA,
       },
     },
-    async ({ session_id, title, prompt, model, duration, resolution, aspect_ratio, generate_audio, artifact_id, session_title }) => {
+    async ({ session_id, title, prompt, model, duration, resolution, aspect_ratio, generate_audio, references, artifact_id, session_title }) => {
       try {
         // Pre-flight validation against the model's whitelist entry caps for
         // actionable errors instead of upstream 400s (PRD #24 story 16).
@@ -188,6 +210,19 @@ function registerCreateVideoTool(
         if (!entry) return toolError(`model ${model} is not on the active whitelist`);
         const preflightError = videoPreflightError(entry, { duration, resolution, aspect_ratio, generate_audio });
         if (preflightError) return toolError(preflightError);
+        // Role routing (PRD #24 References): `style` (default) feeds the
+        // provider's reference list (reference-to-video); first/last frame
+        // roles feed the frame-image list (image-to-video).
+        const inputReferences: string[] = [];
+        const frameImages: { url: string; frame_type: "first_frame" | "last_frame" }[] = [];
+        for (const ref of (references ?? []) as (ReferenceInput & { role?: string })[]) {
+          const { dataUrl } = await resolveReference(ref, store, mediaSizeCap);
+          if (ref.role === "first_frame" || ref.role === "last_frame") {
+            frameImages.push({ url: dataUrl, frame_type: ref.role });
+          } else {
+            inputReferences.push(dataUrl);
+          }
+        }
         // Immediate response: registry row is pending before we return; the
         // background poller owns everything after this point.
         const job = await service.submit({
@@ -200,6 +235,8 @@ function registerCreateVideoTool(
           resolution,
           aspect_ratio,
           generate_audio,
+          inputReferences: inputReferences.length > 0 ? inputReferences : undefined,
+          frameImages: frameImages.length > 0 ? frameImages : undefined,
         });
         const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
         const priceHint = generation.catalog?.get(model)?.priceHint ?? entry.note;
@@ -318,6 +355,44 @@ const MEDIA_SOURCE_SCHEMA = z
     url: z.string().optional().describe("Remote URL, fetched server-side (size-capped)"),
   })
   .describe("Media source: provide exactly one of path, base64+mime, or url");
+
+const MAX_REFERENCES = 8;
+
+/**
+ * Generation reference-image entry: exactly one variant is present per
+ * entry (validated by the resolver at call time). Artifact references must
+ * be image artifacts; all variants resolve to inline data URLs server-side.
+ */
+const REFERENCE_SCHEMA = z
+  .object({
+    artifact: z
+      .object({ session_id: ID_SCHEMA, artifact_id: ID_SCHEMA })
+      .optional()
+      .describe("Prior aurora image artifact to reference by id"),
+    path: z.string().optional().describe("Absolute local image file path"),
+    base64: z.string().optional().describe("Inline base64-encoded image bytes"),
+    mime: z.string().optional().describe("Mime type, required with base64"),
+    url: z.string().optional().describe("Remote image URL"),
+  })
+  .describe("Reference image: provide exactly one of artifact, path, base64+mime, or url");
+
+const REFERENCE_ROLES = z
+  .enum(["style", "first_frame", "last_frame"])
+  .describe("Reference role; defaults to style");
+
+/** Resolve every reference entry to an inline data URL for the provider. */
+async function resolveReferences(
+  refs: ReferenceInput[] | undefined,
+  store: ArtifactStore,
+  mediaSizeCap: number
+): Promise<string[] | undefined> {
+  if (!refs || refs.length === 0) return undefined;
+  const resolved: string[] = [];
+  for (const ref of refs) {
+    resolved.push((await resolveReference(ref, store, mediaSizeCap)).dataUrl);
+  }
+  return resolved;
+}
 
 function registerMediaTool(
   server: McpServer,
@@ -480,11 +555,11 @@ export async function handleMcpRequest(
   // Generation tools are registered only when an OpenRouter API key is
   // configured (env var read once at server start, or injected via options).
   if (generation?.apiKey) {
-    registerCreateImageTool(server, store, baseUrl, liveBus, generation);
+    registerCreateImageTool(server, store, baseUrl, mediaSizeCap, liveBus, generation);
     // The video tool needs the boot-owned poller service (submit-and-notify);
     // it also needs at least one whitelisted video model for a valid enum.
     if (generation.videoService && modelIds(resolveWhitelist(generation).video).length > 0) {
-      registerCreateVideoTool(server, store, baseUrl, liveBus, generation);
+      registerCreateVideoTool(server, store, baseUrl, mediaSizeCap, liveBus, generation);
     }
     // Job status lookup needs the boot-owned registry (video + image jobs).
     if (generation.jobRegistry) {
