@@ -18,6 +18,7 @@ import {
   type WhitelistModelEntry,
 } from "./whitelist";
 import { OpenRouterClient } from "./openrouter";
+import type { JobRegistry } from "./jobRegistry";
 import type { VideoJobService } from "./videoGeneration";
 
 /**
@@ -39,6 +40,8 @@ export interface GenerationOptions {
   jobCeilingMs?: number;
   /** Constructed by the server at boot; create_video is registered only with one */
   videoService?: VideoJobService;
+  /** Same SQLite registry the video service writes; image jobs are recorded here too */
+  jobRegistry?: JobRegistry;
 }
 
 function resolveWhitelist(generation: GenerationOptions): GenerationWhitelist {
@@ -106,6 +109,25 @@ function registerCreateImageTool(
         });
         liveBus?.broadcast(artifactEvent(result));
         const { artifact, created } = result;
+        // Image jobs complete inline but are recorded in the registry so
+        // check_generation can look them up like any other generation job.
+        let job_id: string | undefined;
+        if (generation.jobRegistry) {
+          job_id = `img-${crypto.randomUUID()}`;
+          generation.jobRegistry.createJob({
+            job_id,
+            session_id,
+            target_artifact_id: artifact_id,
+            title,
+            model,
+            prompt,
+          });
+          generation.jobRegistry.updateJob(job_id, {
+            status: "completed",
+            usage_cost: generated.cost,
+            artifact_id: artifact.artifact_id,
+          });
+        }
         const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
         const text = `${created ? "Generated" : "Replaced"} image artifact ${artifact.artifact_id} in session ${session_id} with ${model}. Preview: ${deep_link}`;
         return {
@@ -117,6 +139,7 @@ function registerCreateImageTool(
             deep_link,
             model,
             cost: generated.cost,
+            job_id,
           },
         };
       } catch (err) {
@@ -192,6 +215,67 @@ function registerCreateVideoTool(
             deep_link,
             model,
             price_hint: priceHint,
+          },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+}
+
+function registerCheckGenerationTool(
+  server: McpServer,
+  baseUrl: string,
+  generation: GenerationOptions
+) {
+  const registry = generation.jobRegistry!;
+  const service = generation.videoService;
+  server.registerTool(
+    "check_generation",
+    {
+      title: "Check generation job",
+      description:
+        "Check the status of a generation job (create_video / create_image). " +
+        "Returns {status, artifact_id?, deep_link?, cost?}. If the job completed but the " +
+        "background poller has not processed it yet, this check drives the completion " +
+        "(artifact push, live update, registry update) so the artifact lands immediately.",
+      inputSchema: {
+        job_id: ID_SCHEMA.describe(
+          "Job id as returned by create_video (or create_image's job_id)"
+        ),
+      },
+    },
+    async ({ job_id }) => {
+      try {
+        const job = registry.getJob(job_id);
+        if (!job) {
+          return toolError(
+            `Unknown job id ${job_id}: no generation job with that id exists in the registry. ` +
+              "Use the job_id returned by create_video."
+          );
+        }
+        // Pending job: a single live status GET; if the provider already
+        // reached a terminal state the shared completion path runs here, so
+        // an eager agent gets its artifact without waiting for the poller.
+        let providerError: string | undefined;
+        if (job.status === "pending" && service) {
+          const poll = await service.pollOnce(job_id);
+          providerError = poll.error;
+        }
+        const current = registry.getJob(job_id)!;
+        const deep_link = `${baseUrl}/preview/${encodeURIComponent(current.session_id)}`;
+        const text =
+          `Generation job ${job_id} is ${current.status}` +
+          (current.artifact_id ? `; artifact ${current.artifact_id} in session ${current.session_id}. Preview: ${deep_link}` : `.`) +
+          (providerError ? ` Provider error: ${providerError}` : "");
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: {
+            status: current.status,
+            artifact_id: current.artifact_id ?? undefined,
+            deep_link: current.artifact_id ? deep_link : undefined,
+            cost: current.usage_cost ?? undefined,
           },
         };
       } catch (err) {
@@ -401,6 +485,10 @@ export async function handleMcpRequest(
     // it also needs at least one whitelisted video model for a valid enum.
     if (generation.videoService && modelIds(resolveWhitelist(generation).video).length > 0) {
       registerCreateVideoTool(server, store, baseUrl, liveBus, generation);
+    }
+    // Job status lookup needs the boot-owned registry (video + image jobs).
+    if (generation.jobRegistry) {
+      registerCheckGenerationTool(server, baseUrl, generation);
     }
   }
 
