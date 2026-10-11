@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -10,7 +10,7 @@ import { JobRegistry } from "./jobRegistry";
 
 // The sandbox only allows fixed localhost ports in 3000-3999 / 5000-5999 / 7634.
 // Distinct port per test server: rapid stop/rebind on one port races EADDRINUSE.
-const PORTS = [5091, 5093, 5094, 5095, 5096, 5097, 5098, 5099];
+const PORTS = [5091, 5093, 5094, 5095, 5096, 5097, 5098, 5099, 5101, 5103];
 let portCursor = 0;
 const FAKE_OPENROUTER_PORT = 5092;
 const FAKE_OPENROUTER = `http://127.0.0.1:${FAKE_OPENROUTER_PORT}`;
@@ -123,7 +123,8 @@ interface TestServer {
 
 async function startServer(opts: { pollIntervalMs?: number; jobCeilingMs?: number; dbPath?: string } = {}): Promise<TestServer & { port: number }> {
   const port = PORTS[portCursor++];
-  const usedDb = opts.dbPath ?? dbPath;
+  // Explicit `dbPath: undefined` selects the default (~/.local/share/aurora).
+  const usedDb = "dbPath" in opts ? opts.dbPath : dbPath;
   writeConfig([
     {
       id: "fake/video-model",
@@ -133,6 +134,14 @@ async function startServer(opts: { pollIntervalMs?: number; jobCeilingMs?: numbe
       resolutions: ["720p", "1080p"],
       aspect_ratios: ["16:9", "9:16"],
       supports_audio: true,
+    },
+    {
+      id: "fake/video-no-audio",
+      note: "test video tier without audio",
+      durations: [4, 6, 8],
+      resolutions: ["720p", "1080p"],
+      aspect_ratios: ["16:9", "9:16"],
+      supports_audio: false,
     },
   ]);
   const generation: GenerationOptions = {
@@ -146,7 +155,9 @@ async function startServer(opts: { pollIntervalMs?: number; jobCeilingMs?: numbe
   const server = createServer(root, port, { artifactsDir, generation });
   // Give the fire-and-forget startup catalog fetches a moment to land.
   await Bun.sleep(150);
-  return { server, generation, registry: new JobRegistry(usedDb), port };
+  // The fresh-HOME test leaves usedDb undefined; that test never touches the
+  // registry handle, so fall back to the shared test db for typing only.
+  return { server, generation, registry: new JobRegistry(usedDb ?? dbPath), port };
 }
 
 async function awaitRegistryStatus(registry: JobRegistry, jobId: string, status: string, ms = 5000) {
@@ -207,7 +218,7 @@ describe("create_video", () => {
     expect(tool).toBeDefined();
     const modelSchema = (tool!.inputSchema as any).properties.model;
     expect(modelSchema.type).toBe("string");
-    expect(modelSchema.enum).toEqual(["fake/video-model"]);
+    expect(modelSchema.enum).toEqual(["fake/video-model", "fake/video-no-audio"]);
     // Startup video-catalog fetch enriches the description (cents SKU → $/s).
     expect(JSON.stringify(tool!.description)).toContain("$0.05/s");
     await client.close();
@@ -252,6 +263,7 @@ Draft202012Validator.check_schema(schema)
       { duration: 5 }, // not in [4, 6, 8]
       { resolution: "4K" }, // not in [720p, 1080p]
       { aspect_ratio: "21:9" }, // not in [16:9, 9:16]
+      { model: "fake/video-no-audio", generate_audio: true }, // supports_audio: false
     ]) {
       const res = await client.callTool({
         name: "create_video",
@@ -259,7 +271,7 @@ Draft202012Validator.check_schema(schema)
       });
       expect(res.isError).toBe(true);
       const text = JSON.stringify(res.content);
-      expect(text).toContain("fake/video-model");
+      expect(text).toContain(args.model ?? "fake/video-model");
     }
     const submits = fakeCalls.filter((c) => c.method === "POST" && c.path === "/videos");
     expect(submits.length).toBe(0); // nothing reached the provider
@@ -455,4 +467,88 @@ Draft202012Validator.check_schema(schema)
       rmSync(artifacts2, { recursive: true, force: true });
     }
   });
+
+  it(
+    "works out of the box with the default db path under a fresh HOME (P1: parent dir is created)",
+    async () => {
+    // Nested path whose parent directories do not exist yet, like a fresh install.
+    // A subprocess is required because bun caches os.homedir() per process.
+    writeConfig([
+      {
+        id: "fake/video-model",
+        note: "test video tier",
+        default: true,
+        durations: [4, 6, 8],
+        resolutions: ["720p", "1080p"],
+        aspect_ratios: ["16:9", "9:16"],
+        supports_audio: true,
+      },
+    ]);
+    const freshHome = join(tmpdir(), `aurora-fresh-home-${Date.now()}`, "nested");
+    const port = PORTS[portCursor++];
+    const artifacts = join(tmpdir(), `aurora-fresh-artifacts-${Date.now()}`);
+    const bootScript = `
+      const { createServer } = await import(process.env.AURORA_ROOT + "/server.ts");
+      const generation = {
+        apiKey: "sk-test-openrouter-key",
+        baseUrl: "${FAKE_OPENROUTER}",
+        whitelistPath: process.env.WHITELIST_PATH,
+        pollIntervalMs: 25,
+        jobCeilingMs: 150,
+      };
+      createServer(process.env.ROOT_DIR!, Number(process.env.PORT!), { generation, artifactsDir: process.env.ARTIFACTS_DIR });
+    `;
+    const child = Bun.spawn(["bun", "-e", bootScript], {
+      env: {
+        ...process.env,
+        HOME: freshHome,
+        AURORA_ROOT: import.meta.dir + "/..",
+        PORT: String(port),
+        ROOT_DIR: root,
+        ARTIFACTS_DIR: artifacts,
+        WHITELIST_PATH: configPath,
+      },
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+
+    try {
+      // Wait for boot; a wrong port would surface as connect timeout below.
+      const deadline = Date.now() + 10000;
+      let up = false;
+      while (Date.now() < deadline) {
+        try {
+          const r = await fetch(`http://127.0.0.1:${port}/mcp`);
+          if (r.status === 405) { up = true; break; }
+        } catch { /* not up yet */ }
+        await Bun.sleep(50);
+      }
+      if (!up) {
+        const errText = await Promise.race([new Response(child.stderr as any).text(), Bun.sleep(1000).then(() => "<stderr unreadable>")]);
+        throw new Error(`child did not boot: ${errText}`);
+      }
+      const { client, transport } = makeClient(port);
+      await client.connect(transport);
+      const { tools } = await client.listTools();
+      // Boot must not have fallen back to "create_video disabled".
+      expect(tools.map((t) => t.name)).toContain("create_video");
+      // And a submit must land a pending row at the default location.
+      const res = await client.callTool({
+        name: "create_video",
+        arguments: { session_id: "v-agent", title: "fresh boot", prompt: "p", model: "fake/video-model", duration: 6 },
+      });
+      expect(res.isError, JSON.stringify(res.content)).toBeFalsy();
+      const structured = res.structuredContent as any;
+      expect(structured.job_id).toBeDefined();
+      expect(existsSync(join(freshHome, ".local/share/aurora/generations.db"))).toBe(true);
+      await client.close();
+    } finally {
+      child.kill();
+      await child.exited;
+      rmSync(freshHome, { recursive: true, force: true });
+      rmSync(artifacts, { recursive: true, force: true });
+    }
+    },
+    15000
+  );
 });

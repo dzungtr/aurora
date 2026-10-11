@@ -1,4 +1,6 @@
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 /**
  * SQLite job registry for async generation jobs (bun:sqlite, zero new
@@ -44,6 +46,10 @@ export class JobRegistry {
   private db: Database;
 
   constructor(dbPath: string) {
+    // The default path (~/.local/share/aurora/generations.db) lives under a
+    // directory nothing else creates before first boot; SQLITE_CANTOPEN here
+    // would silently disable create_video for the whole process.
+    mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
     this.db.exec("PRAGMA journal_mode = WAL;");
     this.db.exec(`CREATE TABLE IF NOT EXISTS jobs (
