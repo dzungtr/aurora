@@ -5,6 +5,115 @@ import type { ArtifactStore, MediaSource, PushResult } from "./artifactStore";
 import { DEFAULT_MEDIA_SIZE_CAP } from "./artifactStore";
 import { artifactEvent, type LiveBus } from "./liveBus";
 import { CHART_TYPES, chartContractError, chartPushSchema } from "./chartContract";
+import {
+  buildImageToolDescription,
+  defaultGenerationConfigPath,
+  loadWhitelist,
+  modelIds,
+  preflightParamError,
+  type GenerationWhitelist,
+  type ModelCatalogInfo,
+  type WhitelistModelEntry,
+} from "./whitelist";
+import { OpenRouterClient } from "./openrouter";
+
+/**
+ * Generation configuration injected through server options. The whitelist is
+ * re-read per request (stateless handler) so config edits apply without a
+ * restart; the catalog map is refreshed best-effort at startup.
+ */
+export interface GenerationOptions {
+  apiKey: string;
+  baseUrl: string;
+  whitelistPath?: string;
+  /** Shared, mutable: startup catalog enrichment writes price hints here */
+  catalog?: Map<string, ModelCatalogInfo>;
+}
+
+function resolveWhitelist(generation: GenerationOptions): GenerationWhitelist {
+  return loadWhitelist(generation.whitelistPath ?? defaultGenerationConfigPath());
+}
+
+function registerCreateImageTool(
+  server: McpServer,
+  store: ArtifactStore,
+  baseUrl: string,
+  liveBus: LiveBus | undefined,
+  generation: GenerationOptions
+) {
+  const whitelist = resolveWhitelist(generation);
+  const client = new OpenRouterClient({ apiKey: generation.apiKey, baseUrl: generation.baseUrl });
+  server.registerTool(
+    "create_image",
+    {
+      title: "Generate image",
+      description: buildImageToolDescription(whitelist, generation.catalog),
+      inputSchema: {
+        session_id: ID_SCHEMA.describe("Session id; agent-minted, unique per agent run"),
+        title: z.string().min(1).describe("Human-visible artifact title"),
+        prompt: z.string().min(1).describe("Text prompt describing the image to generate"),
+        model: z
+          .enum(modelIds(whitelist.image) as [string, ...string[]])
+          .describe("OpenRouter image model from the active whitelist"),
+        resolution: z.string().optional().describe("Resolution hint, validated against the model's capabilities"),
+        aspect_ratio: z.string().optional().describe("Aspect ratio hint, validated against the model's capabilities"),
+        quality: z.string().optional().describe("Quality hint, validated against the model's capabilities"),
+        artifact_id: OPTIONAL_ID_SCHEMA,
+        session_title: SESSION_TITLE_SCHEMA,
+      },
+    },
+    async ({ session_id, title, prompt, model, artifact_id, session_title, resolution, aspect_ratio, quality }) => {
+      try {
+        // Pre-flight: validate optional params for actionable errors instead of
+        // upstream 400s (PRD #24 story 16). Caps come from the operator-curated
+        // whitelist entry, not the OpenRouter catalog: the public catalog
+        // exposes pricing only, so the whitelist is the only curated cap source
+        // (amendment 2026-10-11 in issue #24).
+        const entry: WhitelistModelEntry | undefined = resolveWhitelist(generation).image.find(
+          (m) => m.id === model
+        );
+        if (!entry) return toolError(`model ${model} is not on the active whitelist`);
+        for (const [param, value] of [
+          ["resolution", resolution],
+          ["aspect_ratio", aspect_ratio],
+          ["quality", quality],
+        ] as const) {
+          if (value === undefined) continue;
+          const key = param === "resolution" ? "resolutions" : param === "aspect_ratio" ? "aspect_ratios" : "qualities";
+          const err = preflightParamError(entry, key, value);
+          if (err) return toolError(err);
+        }
+        const generated = await client.generateImage({ model, prompt, resolution, aspect_ratio, quality });
+        const image = generated.images[0];
+        const result = await store.pushMedia({
+          session_id,
+          title,
+          type: "image",
+          source: { base64: image.base64, mime: image.mime },
+          artifact_id,
+          session_title,
+        });
+        liveBus?.broadcast(artifactEvent(result));
+        const { artifact, created } = result;
+        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
+        const text = `${created ? "Generated" : "Replaced"} image artifact ${artifact.artifact_id} in session ${session_id} with ${model}. Preview: ${deep_link}`;
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: {
+            session_id,
+            artifact_id: artifact.artifact_id,
+            created,
+            deep_link,
+            model,
+            cost: generated.cost,
+          },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+}
 
 export const MCP_PATH = "/mcp";
 
@@ -108,7 +217,8 @@ export async function handleMcpRequest(
   store: ArtifactStore,
   baseUrl: string,
   mediaSizeCap: number = DEFAULT_MEDIA_SIZE_CAP,
-  liveBus?: LiveBus
+  liveBus?: LiveBus,
+  generation?: GenerationOptions
 ) {
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -196,6 +306,12 @@ export async function handleMcpRequest(
 
   registerMediaTool(server, "push_image", "image", store, baseUrl, mediaSizeCap, liveBus);
   registerMediaTool(server, "push_video", "video", store, baseUrl, mediaSizeCap, liveBus);
+
+  // Generation tools are registered only when an OpenRouter API key is
+  // configured (env var read once at server start, or injected via options).
+  if (generation?.apiKey) {
+    registerCreateImageTool(server, store, baseUrl, liveBus, generation);
+  }
 
   server.registerTool(
     "push_chart",

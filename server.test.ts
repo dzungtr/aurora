@@ -13,6 +13,11 @@ let base: string;
 // server is stopped in afterEach, so sequential reuse of the port is safe.
 const TEST_PORT = 5270;
 
+// Hermetic tests: a real OPENROUTER_API_KEY in the environment would make
+// createServer fall back to a fire-and-forget live catalog fetch. PRD #24
+// Testing Decisions: tests run against the fake only, never live network.
+delete process.env.OPENROUTER_API_KEY;
+
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "aurora-server-"));
   writeFileSync(join(root, "hello.txt"), "hi");
