@@ -91,6 +91,77 @@ export class OpenRouterClient {
     };
   }
 
+  /** Submit an async video generation job (POST /videos, 202 accepted). */
+  async submitVideo(params: VideoSubmitParams): Promise<VideoSubmitResult> {
+    const body: Record<string, unknown> = { model: params.model, prompt: params.prompt };
+    if (params.duration !== undefined) body.duration = params.duration;
+    if (params.resolution !== undefined) body.resolution = params.resolution;
+    if (params.aspect_ratio !== undefined) body.aspect_ratio = params.aspect_ratio;
+    if (params.generate_audio !== undefined) body.generate_audio = params.generate_audio;
+    const res = await fetch(`${this.config.baseUrl}/videos`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`OpenRouter video submit failed (${res.status}): ${text.slice(0, 500)}`);
+    }
+    const data: any = await res.json();
+    if (typeof data?.id !== "string" || data.id.length === 0) {
+      throw new Error("OpenRouter video submit returned no job id");
+    }
+    return { jobId: data.id, pollingUrl: data.polling_url, status: data.status ?? "pending" };
+  }
+
+  /** Poll one video job's status (GET /videos/{jobId}). */
+  async getVideoJob(jobId: string): Promise<VideoJobStatus> {
+    const res = await fetch(`${this.config.baseUrl}/videos/${encodeURIComponent(jobId)}`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`OpenRouter video status failed (${res.status}): ${text.slice(0, 500)}`);
+    }
+    const data: any = await res.json();
+    const contentUrl: string | undefined = Array.isArray(data?.unsigned_urls)
+      ? data.unsigned_urls[0]
+      : undefined;
+    return {
+      status: data?.status ?? "pending",
+      error: typeof data?.error === "string" ? data.error : undefined,
+      cost: typeof data?.usage?.cost === "number" ? data.usage.cost : undefined,
+      contentUrl,
+    };
+  }
+
+  /**
+   * Download completed video content. The URLs in unsigned_urls are not
+   * presigned: the API key goes in the Authorization header, same as polling.
+   */
+  async downloadVideo(url: string): Promise<{ bytes: Uint8Array; mime: string }> {
+    const res = await fetch(url, { headers: { authorization: `Bearer ${this.config.apiKey}` } });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`OpenRouter video download failed (${res.status}): ${text.slice(0, 500)}`);
+    }
+    return {
+      bytes: new Uint8Array(await res.arrayBuffer()),
+      mime: res.headers.get("content-type") ?? "video/mp4",
+    };
+  }
+
+  /**
+   * Best-effort video model catalog fetch (GET /videos/models) for per-second
+   * price hints. Throws on non-OK; callers treat it as best-effort.
+   */
+  async fetchVideoModelCatalog(): Promise<VideoCatalogEntry[]> {
+    const res = await fetch(`${this.config.baseUrl}/videos/models`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`OpenRouter video catalog fetch failed (${res.status})`);
+    const data: any = await res.json();
+    return Array.isArray(data?.data) ? data.data : [];
+  }
+
   /**
    * Best-effort public catalog fetch for price hints. Never throws: an
    * unreachable catalog leaves hints empty (static notes remain).
@@ -101,6 +172,54 @@ export class OpenRouterClient {
     const data: any = await res.json();
     return Array.isArray(data?.data) ? data.data : [];
   }
+}
+
+export interface VideoSubmitParams {
+  model: string;
+  prompt: string;
+  duration?: number;
+  resolution?: string;
+  aspect_ratio?: string;
+  generate_audio?: boolean;
+}
+
+export interface VideoSubmitResult {
+  jobId: string;
+  pollingUrl?: string;
+  status: string;
+}
+
+export interface VideoJobStatus {
+  /** Provider status: pending | in_progress | completed | failed */
+  status: string;
+  error?: string;
+  /** Actual generation cost in USD as reported by OpenRouter usage */
+  cost?: number;
+  /** First content URL from unsigned_urls; download with the auth header */
+  contentUrl?: string;
+}
+
+export interface VideoCatalogEntry {
+  id: string;
+  pricing_skus?: Record<string, string>;
+}
+
+/**
+ * Best-effort per-second price hint from a video catalog entry's pricing_skus.
+ * SKU shapes vary per provider: keys matching /second/ with a "cents_per"
+ * prefix are cents, otherwise dollars; the cheapest tier is shown.
+ */
+export function videoPriceHintForEntry(entry: VideoCatalogEntry): string | undefined {
+  const skus = entry.pricing_skus ?? {};
+  let best: number | undefined;
+  for (const [key, raw] of Object.entries(skus)) {
+    if (!/second/i.test(key)) continue;
+    const v = Number(raw);
+    if (!Number.isFinite(v)) continue;
+    const usd = key.startsWith("cents_per") ? v / 100 : v;
+    if (best === undefined || usd < best) best = usd;
+  }
+  return best === undefined ? undefined : `$${best.toFixed(2)}/s`;
 }
 
 /** Format a catalog entry's per-image price as a display hint. */
