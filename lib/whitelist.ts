@@ -132,8 +132,10 @@ export function buildImageToolDescription(
 }
 
 /**
- * Pre-flight validation of generation params against the model's catalog
- * capabilities. Returns an actionable error message, or null when acceptable.
+ * Pre-flight validation of generation params against the model's capabilities.
+ * Caps come from the whitelist entry (operator-curated config/defaults), not
+ * the OpenRouter catalog: the public catalog carries pricing only (PRD #24
+ * amendment 2026-10-11). Returns an actionable error, or null when acceptable.
  */
 export function preflightParamError(
   entry: WhitelistModelEntry,

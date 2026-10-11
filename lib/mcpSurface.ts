@@ -64,8 +64,11 @@ function registerCreateImageTool(
     },
     async ({ session_id, title, prompt, model, artifact_id, session_title, resolution, aspect_ratio, quality }) => {
       try {
-        // Pre-flight: validate optional params against the model's catalog
-        // capabilities so agents get actionable errors, not upstream 400s.
+        // Pre-flight: validate optional params for actionable errors instead of
+        // upstream 400s (PRD #24 story 16). Caps come from the operator-curated
+        // whitelist entry, not the OpenRouter catalog: the public catalog
+        // exposes pricing only, so the whitelist is the only curated cap source
+        // (amendment 2026-10-11 in issue #24).
         const entry: WhitelistModelEntry | undefined = resolveWhitelist(generation).image.find(
           (m) => m.id === model
         );

@@ -122,6 +122,38 @@ describe("create_image", () => {
     await client.close();
   });
 
+  it("create_image inputSchema validates under JSON Schema draft 2020-12", async () => {
+    // Deterministic coverage of the draft 2020-12 regression for create_image:
+    // the mcpSurface regression server only registers generation tools when a
+    // real OPENROUTER_API_KEY is present, so keyless CI would skip the new
+    // tool there. This server is always generation-configured, so validate the
+    // create_image inputSchema here with Draft202012Validator.check_schema.
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+    const tool = tools.find((t) => t.name === "create_image");
+    expect(tool).toBeDefined();
+    await client.close();
+
+    const script = `
+import json, sys
+from jsonschema import Draft202012Validator
+with open(sys.argv[1]) as f:
+    schema = json.load(f)
+Draft202012Validator.check_schema(schema)
+`;
+    const schemaPath = join(tmpdir(), `aurora-create-image-schema-${Date.now()}.json`);
+    writeFileSync(schemaPath, JSON.stringify(tool!.inputSchema));
+    try {
+      const proc = Bun.spawnSync(["python3", "-c", script, schemaPath]);
+      const stderr = new TextDecoder().decode(proc.stderr);
+      expect(stderr, stderr).toBe("");
+      expect(proc.exitCode).toBe(0);
+    } finally {
+      rmSync(schemaPath, { force: true });
+    }
+  });
+
   it("happy path: prompt-only call snapshots an image artifact and returns cost", async () => {
     const { client, transport } = makeClient();
     await client.connect(transport);

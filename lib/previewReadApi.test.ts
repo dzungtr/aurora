@@ -9,6 +9,11 @@ import { createServer } from "../server";
 // The sandbox forbids ephemeral ports (port 0), so the read API tests pin a
 // fixed loopback port from the allowed dev range (3000-3999 / 5000-5999 / 7634).
 const PORT = 5271;
+
+// Hermetic tests: a real OPENROUTER_API_KEY in the environment would make
+// createServer fall back to a fire-and-forget live catalog fetch. PRD #24
+// Testing Decisions: tests run against the fake only, never live network.
+delete process.env.OPENROUTER_API_KEY;
 const base = `http://127.0.0.1:${PORT}`;
 
 const root = mkdtempSync(join(tmpdir(), "aurora-read-api-"));
