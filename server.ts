@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { ArtifactStore, InvalidArtifactIdError } from "./lib/artifactStore";
 import { LiveBus } from "./lib/liveBus";
-import { handleMcpRequest } from "./lib/mcpSurface";
+import { handleMcpRequest, type GenerationOptions } from "./lib/mcpSurface";
+import { OpenRouterClient, priceHintForEntry } from "./lib/openrouter";
 import { readdir, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import pdfWorkerPath from "pdfjs-dist/build/pdf.worker.min.mjs" with { type: "file" };
@@ -56,12 +57,44 @@ export interface ServerOptions {
   artifactsDir?: string;
   /** Size cap for base64/url media pushes (default 50 MiB) */
   mediaSizeCap?: number;
+  /**
+   * Generation config injection point (tests point baseUrl at a fake
+   * OpenRouter). Defaults to OPENROUTER_API_KEY from the environment, read
+   * once at server start; when absent, generation tools are not registered.
+   */
+  generation?: GenerationOptions;
+}
+
+/**
+ * Best-effort startup catalog fetch: enriches the shared catalog map with
+ * price hints for tool descriptions. Offline or unreachable → static notes
+ * only; never a startup failure.
+ */
+function startCatalogRefresh(generation: GenerationOptions): void {
+  const client = new OpenRouterClient({ apiKey: generation.apiKey, baseUrl: generation.baseUrl });
+  void (async () => {
+    try {
+      const entries = await client.fetchModelCatalog();
+      const catalog = (generation.catalog ??= new Map());
+      for (const entry of entries) {
+        const hint = priceHintForEntry(entry);
+        if (hint) catalog.set(entry.id, { priceHint: hint });
+      }
+    } catch (err) {
+      console.error("generation catalog fetch unavailable; using static notes:", err);
+    }
+  })();
 }
 
 export function createServer(rootDir: string, port: number, options: ServerOptions = {}) {
   const root = resolve(rootDir);
   const artifactStore = new ArtifactStore(options.artifactsDir ?? join(homedir(), ".local/share/aurora/artifacts"));
   const liveBus = new LiveBus();
+  let generation: GenerationOptions | undefined = options.generation;
+  if (generation === undefined && process.env.OPENROUTER_API_KEY) {
+    generation = { apiKey: process.env.OPENROUTER_API_KEY, baseUrl: "https://openrouter.ai/api/v1" };
+  }
+  if (generation) startCatalogRefresh(generation);
   const externalPort = process.env.AURORA_PUBLIC_PORT ? Number(process.env.AURORA_PUBLIC_PORT) : port;
   return Bun.serve({
     port,
@@ -86,7 +119,7 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
       "/mcp": {
         async POST(req) {
           try {
-            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`, options.mediaSizeCap, liveBus);
+            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`, options.mediaSizeCap, liveBus, generation);
           } catch (err) {
             console.error(err);
             return errorResponse(500, "MCP handler error");
