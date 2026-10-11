@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1.7
+#
+# Aurora dev image — ghcr.io/dzungtr/pi-openshell + Bun toolchain.
+#
+# Based on the published pi-openshell image (the OpenShell community `base`
+# sandbox + pi + nix store graft). That base already satisfies the OpenShell
+# supervisor contract (FHS layout, /bin/bash, sandbox user, /sandbox workspace,
+# /etc/openshell/policy.yaml with the /nix read-only grant and the
+# default-profile binary glob) and ships node, git, and the nix CLI.
+#
+# It does NOT ship Bun, which is what Aurora actually runs on. This build
+# merges bun into the existing nix default profile so it lands on the
+# already-policy-allowed /nix/var/nix/profiles/default/bin path. Host nix is
+# NOT required: the nix CLI ships inside the base image and fetches from
+# cache.nixos.org at build time over podman build's network.
+#
+# Build:  podman build -f Containerfile.dev -t ghcr.io/dzungtr/aurora-dev:latest .
+# Push:   podman push ghcr.io/dzungtr/aurora-dev:latest
+#
+# Run (OpenShell):
+#   openshell sandbox create --name aurora-dev \
+#     --from ghcr.io/dzungtr/aurora-dev:latest
+#
+# Then inside the sandbox (repo mounted at /workspace or /sandbox):
+#   bun install --frozen-lockfile
+#   bun test
+#   bun --hot cli.ts . --port 7634    # bind 127.0.0.1 by default; use
+#                                     # AURORA_HOST=0.0.0.0 to expose via publish
+
+ARG BASE=ghcr.io/dzungtr/pi-openshell:openrouter
+
+FROM ${BASE}
+
+USER root
+
+# nix.conf: the /nix graft from nixos/nix does not carry /etc/nix (it lives
+# outside the store); re-create the same single-user, sandbox-less config the
+# pi-openshell builder stage uses.
+RUN mkdir -p /etc/nix \
+    && printf 'experimental-features = nix-command flakes\nsandbox = false\nbuild-users-group =\n' > /etc/nix/nix.conf
+
+# Merge bun into the default profile. Priority 6: existing entries sit at 4
+# (piTools) and 5 (stock nix profile) — a tie errors out, and higher-than-all
+# means bun stays canonical on any collision. `--profile` is required: the
+# graft lost the /root/.nix-profile chain and `nix profile` ignores
+# NIX_PROFILE (that's nix-env-era).
+RUN nix --extra-experimental-features "nix-command flakes" \
+    profile install --profile /nix/var/nix/profiles/default \
+    nixpkgs#bun --priority 6 \
+    && rm -rf /root/.cache/nix /root/.local/state/nix
+
+# Base image PATH already includes /nix/var/nix/profiles/default/bin — the
+# merged profile puts bun on it. No ENV changes needed.
+
+USER sandbox
+WORKDIR /sandbox
