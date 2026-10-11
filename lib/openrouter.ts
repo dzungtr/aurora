@@ -12,6 +12,8 @@ export interface OpenRouterClientConfig {
 export interface ImageGenerationParams {
   model: string;
   prompt: string;
+  /** Inline data URLs for image-to-image reference images */
+  references?: string[];
   resolution?: string;
   aspect_ratio?: string;
   quality?: string;
@@ -70,7 +72,20 @@ export class OpenRouterClient {
       headers: this.headers(),
       body: JSON.stringify({
         model: params.model,
-        messages: [{ role: "user", content: params.prompt }],
+        // With references the message becomes multimodal: text part plus one
+        // image_url part per reference (OpenRouter image-to-image input).
+        messages: [
+          {
+            role: "user",
+            content:
+              params.references && params.references.length > 0
+                ? [
+                    { type: "text", text: params.prompt },
+                    ...params.references.map((url) => ({ type: "image_url", image_url: { url } })),
+                  ]
+                : params.prompt,
+          },
+        ],
         modalities: ["image", "text"],
         image_config: imageConfig,
       }),
@@ -98,6 +113,19 @@ export class OpenRouterClient {
     if (params.resolution !== undefined) body.resolution = params.resolution;
     if (params.aspect_ratio !== undefined) body.aspect_ratio = params.aspect_ratio;
     if (params.generate_audio !== undefined) body.generate_audio = params.generate_audio;
+    if (params.inputReferences && params.inputReferences.length > 0) {
+      body.input_references = params.inputReferences.map((url) => ({
+        type: "image_url",
+        image_url: { url },
+      }));
+    }
+    if (params.frameImages && params.frameImages.length > 0) {
+      body.frame_images = params.frameImages.map((f) => ({
+        type: "image_url",
+        image_url: { url: f.url },
+        frame_type: f.frame_type,
+      }));
+    }
     const res = await fetch(`${this.config.baseUrl}/videos`, {
       method: "POST",
       headers: this.headers(),
@@ -174,9 +202,19 @@ export class OpenRouterClient {
   }
 }
 
+export interface VideoFrameImage {
+  /** Inline data URL of the frame image */
+  url: string;
+  frame_type: "first_frame" | "last_frame";
+}
+
 export interface VideoSubmitParams {
   model: string;
   prompt: string;
+  /** Style/content reference images (reference-to-video), inline data URLs */
+  inputReferences?: string[];
+  /** First/last frame images (image-to-video) */
+  frameImages?: VideoFrameImage[];
   duration?: number;
   resolution?: string;
   aspect_ratio?: string;
