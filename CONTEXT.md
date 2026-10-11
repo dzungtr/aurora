@@ -46,3 +46,17 @@ _Avoid_: notifier, push channel
 
 **Auto-advance**:
 Behavior where a viewed session's stack advances to a newly pushed artifact. Never navigates the user away from a different session — that gets a badge.
+
+### Generation
+
+**Generation**:
+Synthesis of new media by aurora calling a provider model server-side; the output is snapshotted as an artifact. Contrast with Push, which snapshots bytes the agent already has.
+_Avoid_: render, draw, AI call
+
+**Job**:
+One async generation unit tracked in the job registry from submit to a terminal state (completed, failed, cancelled, expired), landing as an artifact or a visible failure artifact.
+_Avoid_: task, request
+
+**Whitelist**:
+The operator-curated allowlist of provider models exposed to agents as the generation tools' model enum.
+_Avoid_: catalog, allowlist, model list
