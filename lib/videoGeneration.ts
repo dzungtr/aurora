@@ -27,6 +27,12 @@ export interface VideoJobServiceOptions {
   log?: (message: string) => void;
 }
 
+export interface PollOnceResult {
+  terminal: boolean;
+  /** Provider error message when the terminal state was a failure. */
+  error?: string;
+}
+
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_CEILING_MS = 15 * 60_000;
 
@@ -40,6 +46,8 @@ function sleep(ms: number): Promise<void> {
 export class VideoJobService {
   private stopped = false;
   private running = new Set<string>();
+  /** Jobs whose terminal transition is in flight; keeps the poller and an eager check_generation from double-pushing. */
+  private completing = new Set<string>();
   private pollIntervalMs: number;
   private ceilingMs: number;
 
@@ -95,7 +103,7 @@ export class VideoJobService {
           if (this.stopped || !this.running.has(jobId)) return;
           try {
             const done = await this.pollOnce(jobId);
-            if (done) return;
+            if (done.terminal) return;
           } catch (err) {
             // Transient poll errors (network, 5xx): keep polling until the ceiling.
             this.options.log?.(`video job ${jobId}: poll error: ${err}`);
@@ -109,24 +117,37 @@ export class VideoJobService {
   }
 
   /**
-   * One status GET plus the terminal-state handling. Returns true when the
-   * job reached a terminal state. Shared by the poller loop and #27's
+   * One status GET plus the terminal-state handling. `terminal` is true when
+   * the job reached a terminal state; `error` carries the provider error
+   * message on a failed transition. Shared by the poller loop and #27's
    * check_generation completion path.
    */
-  async pollOnce(jobId: string): Promise<boolean> {
+  async pollOnce(jobId: string): Promise<PollOnceResult> {
     const job = this.options.registry.getJob(jobId);
-    if (!job || job.status !== "pending") return true; // already terminal or unknown
+    if (!job || job.status !== "pending") return { terminal: true }; // already terminal or unknown
+    if (this.completing.has(jobId)) return { terminal: false };
     const status = await this.options.client.getVideoJob(jobId);
     if (status.status === "completed") {
-      await this.completeJob(job, status.contentUrl, status.cost);
-      return true;
+      this.completing.add(jobId);
+      try {
+        await this.completeJob(job, status.contentUrl, status.cost);
+      } finally {
+        this.completing.delete(jobId);
+      }
+      return { terminal: true };
     }
     if (!NON_TERMINAL_STATUSES.has(status.status)) {
       // failed / cancelled / any other provider terminal state
-      await this.failJob(job, status.status === "failed" ? "failed" : "cancelled", status.error);
-      return true;
+      const reason = status.status === "failed" ? "failed" : "cancelled";
+      this.completing.add(jobId);
+      try {
+        await this.failJob(job, reason, status.error);
+      } finally {
+        this.completing.delete(jobId);
+      }
+      return { terminal: true, error: status.error };
     }
-    return false;
+    return { terminal: false };
   }
 
   /** Boot-time recovery: re-attach pollers to every pending registry row. */

@@ -118,6 +118,9 @@ function startVideoJobService(generation: GenerationOptions, store: ArtifactStor
       log: (m) => console.error(`video job service: ${m}`),
     });
     generation.videoService = service;
+    // Same registry, exposed for check_generation's job lookups and for
+    // create_image to record its inline-completed jobs.
+    generation.jobRegistry = registry;
     service.recoverPending();
   } catch (err) {
     // An unusable registry (unwritable data dir) disables create_video only;
