@@ -117,7 +117,7 @@ lost = Text("dropped")`;
     });
   });
 
-  test("mermaid newlines:</arg_value></tool_call><tool_call>bash<arg_key>command</arg_key><arg_value>cd ~/.pi/worktrees/fix1-pr50 && bun test lib/openuiLibrary.test.ts 2>&1 | tail -20</arg_value></tool_call><tool_call>bash<arg_key>command</arg_key><arg_value>cd ~/.pi/worktrees/fix1-pr50 && bun test 2>&1 | tail -8</arg_value></tool_call><tool_call>bash<arg_key>command</arg_key><arg_value>cd ~/.pi/worktrees/fix1-pr50 && npx tsc --noEmit && echo TSC_OK</arg_value></tool_call><tool_call>bash<arg_key>command</arg_key><arg_value>cd ~/.pi/worktrees/fix1-pr50 && git add lib/openuiLibrary.tsx lib/openuiLibrary.test.ts && git commit -m  \\n escapes in the source string become real newlines", () => {
+  test("mermaid newlines: \\n escapes in the source string become real newlines", () => {
     const src = 'root = Stack([m], "column")\nm = Mermaid("flowchart TD\\n  A-->B")';
     const parser = createParser(auroraUiLibrary.toJSONSchema());
     const result = parser.parse(src);
