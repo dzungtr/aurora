@@ -9,8 +9,10 @@ import {
   formatUiProgramErrors,
   generateUiToolDescription,
   PUSH_UI_CROSS_GUIDANCE,
+  statementNames,
   validateUiProgram,
 } from "./openuiLibrary";
+import { mergeStatements } from "@openuidev/react-lang";
 import {
   buildImageToolDescription,
   buildVideoToolDescription,
@@ -425,14 +427,48 @@ function registerPushUiTool(
           .string()
           .min(1)
           .describe("Complete openui-lang program (one statement per line) against the aurora component library"),
+        mode: z
+          .enum(["replace", "patch"])
+          .optional()
+          .describe(
+            '"replace" (default): program is the complete replacement. "patch": program holds only changed/new statements; they are merged server-side into the artifact_id snapshot by statement name (same name replaces, new name adds, missing kept) and the MERGED full program is stored as the new snapshot. Requires artifact_id.'
+          ),
         artifact_id: OPTIONAL_ID_SCHEMA,
         session_title: SESSION_TITLE_SCHEMA,
       },
     },
-    async ({ session_id, title, program, artifact_id, session_title }) => {
+    async ({ session_id, title, program, mode, artifact_id, session_title }) => {
       try {
+        // Patch mode (issue #41): merge server-side against the previous
+        // snapshot's source; the merged full program becomes the new immutable
+        // snapshot (ADR 0002 — deltas are never stored).
+        let merged = false;
+        if (mode === "patch") {
+          if (!artifact_id) {
+            return toolError(
+              'mode "patch" requires artifact_id — the snapshot to merge into. ' +
+                "Push a full program (no mode) first, or omit mode to replace."
+            );
+          }
+          const existing = await store.getArtifact(session_id, artifact_id);
+          if (!existing) {
+            return toolError(
+              `Artifact ${artifact_id} not found in session ${session_id} — nothing to patch. ` +
+                "Push a full program instead, or check the artifact_id."
+            );
+          }
+          if (existing.meta.type !== "ui") {
+            return toolError(
+              `Artifact ${artifact_id} is a ${existing.meta.type} artifact — patch mode applies only to ui artifacts. ` +
+                "Use a full push (no mode) to replace it with a UI artifact."
+            );
+          }
+          program = mergeStatements(existing.content, program);
+          merged = true;
+        }
         // Push-time validation before snapshot (spec #37). Every invalid or
-        // dropped statement is surfaced — never silently hidden.
+        // dropped statement is surfaced — never silently hidden. In patch mode
+        // this validates the merged result, so caps apply to the merge too.
         const errors = validateUiProgram(program);
         if (errors.length > 0) return toolError(formatUiProgramErrors(errors));
         const result = await store.pushUi({ session_id, title, program, artifact_id, session_title });
@@ -440,13 +476,17 @@ function registerPushUiTool(
         liveBus?.broadcast(artifactEvent(result));
         const { artifact, created } = result;
         const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
-        const text = `${created ? "Pushed" : "Replaced"} UI artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
+        const text = `${merged ? "Patched" : created ? "Pushed" : "Replaced"} UI artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
             session_id,
             artifact_id: artifact.artifact_id,
             created,
+            merged,
+            // Patch merge is by name; echoing the final statement-name list
+            // lets the agent chain patches without holding the old program.
+            ...(merged ? { statement_names: statementNames(program) } : {}),
             deep_link,
           },
         };

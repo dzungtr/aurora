@@ -146,3 +146,157 @@ describe("push_ui", () => {
     expect(text).toContain("line 2");
   });
 });
+
+describe("push_ui patch mode (issue #41)", () => {
+  it("patch: merges server-side and stores the merged full program as the new snapshot", async () => {
+    const first = await pushUi({
+      session_id: "ui-patch",
+      title: "v1",
+      program: VALID_PROGRAM,
+    });
+    const aid = (first.structuredContent as any).artifact_id;
+    const res = await pushUi({
+      session_id: "ui-patch",
+      title: "v2",
+      program: 't1 = Text("patched hello")',
+      mode: "patch",
+      artifact_id: aid,
+    });
+    expect(res.isError).toBeUndefined();
+    const sc = res.structuredContent as any;
+    expect(sc.merged).toBe(true);
+    expect(sc.artifact_id).toBe(aid);
+    // statement-name echo: final list after merge
+    expect(sc.statement_names).toEqual(["root", "card1", "t1"]);
+    // merged full program stored (ADR 0002 — no deltas)
+    const fetched = await (
+      await fetch(`${BASE}/api/preview/sessions/ui-patch/artifacts/${aid}`)
+    ).json();
+    expect(fetched.content).toContain('t1 = Text("patched hello")');
+    expect(fetched.content).toContain("root = Stack([card1]");
+    expect(fetched.content).not.toContain("hello aurora");
+  });
+
+  it("patch: new names add, missing names kept", async () => {
+    const first = await pushUi({
+      session_id: "ui-patch2",
+      title: "v1",
+      program: VALID_PROGRAM,
+    });
+    const aid = (first.structuredContent as any).artifact_id;
+    // OpenUI merge GCs unreachable statements, so the new card must be
+    // wired into the root for the addition to survive.
+    const res = await pushUi({
+      session_id: "ui-patch2",
+      title: "v2",
+      program: 'root = Stack([card1, card2], "column")\ncard2 = Card([t2])\nt2 = Text("added")',
+      mode: "patch",
+      artifact_id: aid,
+    });
+    const sc = res.structuredContent as any;
+    expect(sc.statement_names).toEqual(["root", "card1", "t1", "card2", "t2"]);
+  });
+
+  it("patch without artifact_id is an actionable error", async () => {
+    const res = await pushUi({
+      session_id: "ui-patch-noaid",
+      title: "x",
+      program: VALID_PROGRAM,
+      mode: "patch",
+    });
+    expect(res.isError).toBe(true);
+    expect((res.content as any)[0].text).toContain("artifact_id");
+  });
+
+  it("patch against a missing artifact is an actionable error", async () => {
+    const res = await pushUi({
+      session_id: "ui-patch-missing",
+      title: "x",
+      program: VALID_PROGRAM,
+      mode: "patch",
+      artifact_id: "no-such-artifact",
+    });
+    expect(res.isError).toBe(true);
+    const text = (res.content as any)[0].text;
+    expect(text).toContain("no-such-artifact");
+    expect(text).toContain("not found");
+  });
+
+  it("patch against a non-UI artifact is an actionable error", async () => {
+    // create a markdown artifact via push artifact flow: use the HTTP API used by tests
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    await client.callTool({
+      name: "push_markdown",
+      arguments: { session_id: "ui-patch-nonui", title: "md", content: "# hi" },
+    }).catch(() => {});
+    await client.close();
+    // find the markdown artifact id
+    const listed = await (
+      await fetch(`${BASE}/api/preview/sessions/ui-patch-nonui/artifacts`)
+    ).json();
+    const md = (Array.isArray(listed) ? listed : listed.artifacts ?? []).find(
+      (a: any) => a.type === "markdown"
+    );
+    expect(md).toBeDefined();
+    const res = await pushUi({
+      session_id: "ui-patch-nonui",
+      title: "x",
+      program: VALID_PROGRAM,
+      mode: "patch",
+      artifact_id: md.artifact_id,
+    });
+    expect(res.isError).toBe(true);
+    const text = (res.content as any)[0].text;
+    expect(text).toContain("markdown");
+    expect(text).toContain("ui");
+  });
+
+  it("caps are enforced on the merged result", async () => {
+    const first = await pushUi({
+      session_id: "ui-patch-cap",
+      title: "v1",
+      program: VALID_PROGRAM,
+    });
+    const aid = (first.structuredContent as any).artifact_id;
+    // Patch rewires the root to 199 reachable Texts; merged result is
+    // 200 patch statements + card1 + t1 = 202 > 200 cap.
+    const ids = Array.from({ length: 199 }, (_, i) => `t${i}`);
+    const patch = [`root = Stack([card1, ${ids.join(", ")}], "column")`]
+      .concat(ids.map((id) => `${id} = Text("x")`))
+      .join("\n");
+    const res = await pushUi({
+      session_id: "ui-patch-cap",
+      title: "v2",
+      program: patch,
+      mode: "patch",
+      artifact_id: aid,
+    });
+    expect(res.isError).toBe(true);
+    expect((res.content as any)[0].text).toContain("200-statement cap");
+  });
+
+  it("bare artifact_id (no mode) stays full replace, unchanged", async () => {
+    const first = await pushUi({
+      session_id: "ui-patch-replace",
+      title: "v1",
+      program: VALID_PROGRAM,
+    });
+    const aid = (first.structuredContent as any).artifact_id;
+    const res = await pushUi({
+      session_id: "ui-patch-replace",
+      title: "v2",
+      program: 'root = Stack([t9], "column")\nt9 = Text("full replace")',
+      artifact_id: aid,
+    });
+    expect(res.isError).toBeUndefined();
+    const sc = res.structuredContent as any;
+    expect(sc.created).toBe(false);
+    expect(sc.merged).toBe(false);
+    const fetched = await (
+      await fetch(`${BASE}/api/preview/sessions/ui-patch-replace/artifacts/${aid}`)
+    ).json();
+    expect(fetched.content).toContain('t9 = Text("full replace")');
+    expect(fetched.content).not.toContain("card1");
+  });
+});

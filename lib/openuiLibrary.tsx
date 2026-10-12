@@ -114,6 +114,37 @@ export function countStatements(source: string): number {
   return count;
 }
 
+/**
+ * Final statement names of a program in source order (merge echo, issue #41).
+ * Same depth-0 `identifier =` scan as countStatements.
+ */
+export function statementNames(source: string): string[] {
+  const names: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+    } else if (c === '"' || c === "'" || c === "`") {
+      quote = c;
+    } else if (c === "(" || c === "[" || c === "{") {
+      depth++;
+    } else if (c === ")" || c === "]" || c === "}") {
+      depth--;
+    } else if (depth === 0 && /[$A-Za-z_]/.test(c)) {
+      const m = /^[$A-Za-z_][A-Za-z0-9_$]*/.exec(source.slice(i))!;
+      const rest = source.slice(i + m[0].length).replace(/^[ \t]*/, "");
+      if (rest.startsWith("=") && !rest.startsWith("==")) names.push(m[0]);
+      i += m[0].length - 1;
+    }
+    i++;
+  }
+  return names;
+}
+
 /** 1-indexed line of `id = …`, or undefined when the statement name isn't in the source. */
 function lineOfStatement(source: string, id: string): number | undefined {
   const idx = source.search(new RegExp(`^${id.replace(/\$/g, "\\$")}\\s*=`, "m"));
