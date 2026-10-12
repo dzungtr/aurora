@@ -13,6 +13,7 @@ import {
   validateUiProgram,
 } from "./openuiLibrary";
 import { createParser } from "@openuidev/react-lang";
+import { chartDataSchema, chartPushSchema } from "./chartContract";
 
 const VALID = WORKED_EXAMPLE;
 
@@ -90,7 +91,33 @@ lost = Text("dropped")`;
     expect(e!.line).toBe(2);
   });
 
-  test("mermaid newlines: \\n escapes in the source string become real newlines", () => {
+  test("chart data shape: push_ui errors are IDENTICAL to push_chart's chartDataSchema rejections", () => {
+    // Malformed payloads the OpenUI parser's top-level checks miss entirely.
+    const malformed = [
+      { kind: "pie" }, // missing required points
+      { kind: "pie", points: [{ label: "A", value: "x" }] }, // wrong point value type
+      { kind: "bogus" }, // unknown kind
+    ];
+    malformed.forEach((data, i) => {
+      const src = `root = Stack([c${i}], "column")\nc${i} = Chart("pie", ${JSON.stringify(data)})`;
+      const errors = validateUiProgram(src).filter((x) => x.code === "chart-data");
+      // push_chart rejects the same payload through the same contract schema.
+      expect(chartPushSchema.safeParse({ chart_type: "pie", data }).success).toBe(false);
+      const contractParse = chartDataSchema.safeParse(data);
+      const pushChartIssues = contractParse.success ? [] : contractParse.error.issues;
+      expect(pushChartIssues.length).toBeGreaterThan(0);
+      expect(errors.length).toBe(pushChartIssues.length);
+      // Every zod issue from the push_chart contract is wrapped verbatim.
+      pushChartIssues.forEach((issue) => {
+        const e = errors.find((x) => x.message.includes(`at "${issue.path.join(".")}": ${issue.message}`));
+        expect(e).toBeDefined();
+        expect(e!.line).toBe(2);
+        expect(e!.statementId).toBe(`c${i}`);
+      });
+    });
+  });
+
+  test("mermaid newlines:</arg_value></tool_call><tool_call>bash<arg_key>command</arg_key><arg_value>cd ~/.pi/worktrees/fix1-pr50 && bun test lib/openuiLibrary.test.ts 2>&1 | tail -20</arg_value></tool_call><tool_call>bash<arg_key>command</arg_key><arg_value>cd ~/.pi/worktrees/fix1-pr50 && bun test 2>&1 | tail -8</arg_value></tool_call><tool_call>bash<arg_key>command</arg_key><arg_value>cd ~/.pi/worktrees/fix1-pr50 && npx tsc --noEmit && echo TSC_OK</arg_value></tool_call><tool_call>bash<arg_key>command</arg_key><arg_value>cd ~/.pi/worktrees/fix1-pr50 && git add lib/openuiLibrary.tsx lib/openuiLibrary.test.ts && git commit -m  \\n escapes in the source string become real newlines", () => {
     const src = 'root = Stack([m], "column")\nm = Mermaid("flowchart TD\\n  A-->B")';
     const parser = createParser(auroraUiLibrary.toJSONSchema());
     const result = parser.parse(src);

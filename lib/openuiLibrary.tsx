@@ -228,6 +228,23 @@ export function validateUiProgram(source: string): UiProgramError[] {
   collectChartNodes(result.root).forEach((node) => {
     const { chart_type, data } = node.props as { chart_type?: ChartType; data?: ChartData };
     if (!chart_type || !data) return; // shape errors already reported by the parser
+    // The OpenUI parser only enforces top-level props — the nested zod shape of
+    // `data` must be checked here, or a malformed payload passes validation and
+    // crashes the viewer (chartToOption dereferences data.points). Same
+    // chartDataSchema.safeParse push_chart enforces, so the rejection set is
+    // identical; kind coherence below assumes a valid shape.
+    const parsed = chartDataSchema.safeParse(data);
+    if (!parsed.success) {
+      parsed.error.issues.forEach((issue) => {
+        errors.push({
+          line: node.statementId ? lineOfStatement(source, node.statementId) : undefined,
+          statementId: node.statementId,
+          code: "chart-data",
+          message: `Chart data does not match the push_chart data contract at "${issue.path.join(".")}": ${issue.message}. Use the push_chart data contract for the "${chart_type}" chart_type.`,
+        });
+      });
+      return; // kind coherence is meaningless for an invalid shape
+    }
     const contractError = chartContractError(chart_type, data);
     if (contractError) {
       errors.push({
