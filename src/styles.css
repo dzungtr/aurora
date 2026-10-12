@@ -676,3 +676,21 @@
   border-radius: 6px; border: none; background: transparent; color: var(--text-light); cursor: pointer;
 }
 .aur-live-toast__dismiss:hover { background: var(--e3); color: var(--text); }
+
+/* push_ui artifact (agent-composed dashboard via the aurora component library) */
+.aur-ui { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
+.aur-ui__pane { display: flex; align-items: safe center; justify-content: safe center; overflow: auto; }
+.aur-ui__stack { display: flex; gap: 12px; width: 100%; }
+.aur-ui__stack[data-direction="column"] { flex-direction: column; }
+.aur-ui__stack[data-direction="row"] { flex-direction: row; align-items: flex-start; }
+.aur-ui__card {
+  background: var(--e2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0;
+}
+.aur-ui__text { color: var(--text); font-size: 14px; margin: 0; line-height: 1.45; }
+.aur-ui__errorblock {
+  background: var(--negative-a15, rgba(220, 60, 60, 0.12)); border: 1px solid var(--negative);
+  border-radius: 8px; padding: 10px 12px;
+}
+.aur-ui__errorhead { color: var(--negative); font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.aur-ui__errorline { color: var(--text); font-size: 12px; font-family: ui-monospace, monospace; line-height: 1.5; }

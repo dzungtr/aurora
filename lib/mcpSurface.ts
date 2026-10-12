@@ -6,6 +6,12 @@ import { DEFAULT_MEDIA_SIZE_CAP } from "./artifactStore";
 import { artifactEvent, type LiveBus } from "./liveBus";
 import { CHART_TYPES, chartContractError, chartPushSchema } from "./chartContract";
 import {
+  formatUiProgramErrors,
+  generateUiToolDescription,
+  PUSH_UI_CROSS_GUIDANCE,
+  validateUiProgram,
+} from "./openuiLibrary";
+import {
   buildImageToolDescription,
   buildVideoToolDescription,
   defaultGenerationConfigPath,
@@ -394,6 +400,63 @@ async function resolveReferences(
   return resolved;
 }
 
+/**
+ * push_ui (issue #39, spec #37): the agent composes a complete openui-lang
+ * program against the aurora component library (lib/openuiLibrary.ts). The
+ * description is generated from that library definition — never hand-written.
+ * Validation runs at push time before snapshot; invalid or dropped statements
+ * are returned as structured, self-correcting errors.
+ */
+function registerPushUiTool(
+  server: McpServer,
+  store: ArtifactStore,
+  baseUrl: string,
+  liveBus?: LiveBus
+) {
+  server.registerTool(
+    "push_ui",
+    {
+      title: "Push UI dashboard artifact",
+      description: generateUiToolDescription(),
+      inputSchema: {
+        session_id: ID_SCHEMA.describe("Session id; agent-minted, unique per agent run"),
+        title: z.string().min(1).describe("Human-visible artifact title"),
+        program: z
+          .string()
+          .min(1)
+          .describe("Complete openui-lang program (one statement per line) against the aurora component library"),
+        artifact_id: OPTIONAL_ID_SCHEMA,
+        session_title: SESSION_TITLE_SCHEMA,
+      },
+    },
+    async ({ session_id, title, program, artifact_id, session_title }) => {
+      try {
+        // Push-time validation before snapshot (spec #37). Every invalid or
+        // dropped statement is surfaced — never silently hidden.
+        const errors = validateUiProgram(program);
+        if (errors.length > 0) return toolError(formatUiProgramErrors(errors));
+        const result = await store.pushUi({ session_id, title, program, artifact_id, session_title });
+        // Thin live-update event: clients refetch content over HTTP.
+        liveBus?.broadcast(artifactEvent(result));
+        const { artifact, created } = result;
+        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
+        const text = `${created ? "Pushed" : "Replaced"} UI artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: {
+            session_id,
+            artifact_id: artifact.artifact_id,
+            created,
+            deep_link,
+          },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+}
+
 function registerMediaTool(
   server: McpServer,
   name: "push_image" | "push_video",
@@ -574,7 +637,8 @@ export async function handleMcpRequest(
       description:
         'Push a data chart rendered with aurora\'s house theme. chart_type is one of ' +
         CHART_TYPES.join("|") +
-        '. data must match the per-type contract: pie → {kind:"pie", points:[{label,value}]}; bar/column → {kind:"categorical", categories:[string], series:[{name, values:[number]}]}; line/area → {kind:"line", x:[string|number], series:[{name, values:[number]}]}; scatter → {kind:"scatter", series:[{name, points:[[x,y]]}]}. Agents never send raw chart-lib specs.',
+        '. data must match the per-type contract: pie → {kind:"pie", points:[{label,value}]}; bar/column → {kind:"categorical", categories:[string], series:[{name, values:[number]}]}; line/area → {kind:"line", x:[string|number], series:[{name, values:[number]}]}; scatter → {kind:"scatter", series:[{name, points:[[x,y]]}]}. Agents never send raw chart-lib specs. ' +
+        PUSH_UI_CROSS_GUIDANCE,
       inputSchema: {
         session_id: z
           .string()
@@ -627,6 +691,8 @@ export async function handleMcpRequest(
       };
     }
   );
+
+  registerPushUiTool(server, store, baseUrl, liveBus);
 
   await server.connect(transport);
   try {

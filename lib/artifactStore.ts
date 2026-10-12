@@ -328,6 +328,23 @@ export class ArtifactStore {
     });
   }
 
+  /**
+   * Push a UI artifact (openui-lang program against the aurora component
+   * library, lib/openuiLibrary.ts). Same session/replace semantics as
+   * pushMarkdown; the program source itself is stored (ADR 0002: corpus
+   * outlives any renderer). Validation happens in the tool handler before
+   * this call.
+   */
+  async pushUi(input: {
+    session_id: string;
+    title: string;
+    program: string;
+    artifact_id?: string;
+    session_title?: string;
+  }): Promise<PushResult> {
+    return this.pushArtifact({ ...input, content: input.program, type: "ui" });
+  }
+
   private async pushArtifact(input: PushMarkdownInput): Promise<PushResult> {
     validateId(input.session_id);
     if (input.artifact_id !== undefined) validateId(input.artifact_id);
