@@ -178,32 +178,12 @@ describe("/api/rename", () => {
 });
 
 describe("resolvePublicBaseUrl", () => {
-  const req = (headers: Record<string, string> = {}) =>
-    new Request("http://x/mcp", { method: "POST", headers });
-
   it("falls back to loopback with the external port", () => {
-    expect(resolvePublicBaseUrl(req(), 7634)).toBe("http://127.0.0.1:7634");
+    expect(resolvePublicBaseUrl(7634)).toBe("http://127.0.0.1:7634");
   });
 
-  it("uses the request Host header when present", () => {
-    expect(resolvePublicBaseUrl(req({ host: "myhost.example:9999" }), 7634)).toBe(
-      "http://myhost.example:9999",
-    );
-  });
-
-  it("prefers X-Forwarded-Host and X-Forwarded-Proto (proxy/ingress)", () => {
-    expect(
-      resolvePublicBaseUrl(
-        req({ host: "internal:7634", "x-forwarded-host": "aurora.ts.net", "x-forwarded-proto": "https" }),
-        7634,
-      ),
-    ).toBe("https://aurora.ts.net");
-  });
-
-  it("AURORA_PUBLIC_URL overrides everything, trailing slashes trimmed", () => {
-    expect(resolvePublicBaseUrl(req({ host: "internal:7634" }), 7634, "https://aurora.ts.net/")).toBe(
-      "https://aurora.ts.net",
-    );
+  it("publicUrl overrides the fallback, trailing slashes trimmed", () => {
+    expect(resolvePublicBaseUrl(7634, "https://aurora.ts.net/")).toBe("https://aurora.ts.net");
   });
 });
 

@@ -136,17 +136,10 @@ function startVideoJobService(generation: GenerationOptions, store: ArtifactStor
  * Precedence:
  * 1. publicUrl from the generation config (~/.config/aurora/generation.json),
  *    re-read per request (e.g. a remote ingress).
- * 2. The request's own Host header (plus X-Forwarded-Proto when present),
- *    so agents connecting via a remote ingress get links reachable by them.
- * 3. Fallback to loopback with the external (published) port.
+ * 2. Fallback to loopback with the external (published) port.
  */
-export function resolvePublicBaseUrl(req: Request, externalPort: number, publicUrl?: string): string {
+export function resolvePublicBaseUrl(externalPort: number, publicUrl?: string): string {
   if (publicUrl) return publicUrl.replace(/\/+$/, "");
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  if (host) {
-    const proto = req.headers.get("x-forwarded-proto") ?? "http";
-    return `${proto}://${host}`;
-  }
   return `http://127.0.0.1:${externalPort}`;
 }
 
@@ -186,7 +179,7 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
       "/mcp": {
         async POST(req) {
           try {
-            return await handleMcpRequest(req, artifactStore, resolvePublicBaseUrl(req, externalPort, loadPublicUrl()), options.mediaSizeCap, liveBus, generation);
+            return await handleMcpRequest(req, artifactStore, resolvePublicBaseUrl(externalPort, loadPublicUrl()), options.mediaSizeCap, liveBus, generation);
           } catch (err) {
             console.error(err);
             return errorResponse(500, "MCP handler error");
