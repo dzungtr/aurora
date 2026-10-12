@@ -20,6 +20,7 @@ import { MarkdownArtifact } from "./MarkdownArtifact";
 import { ChartView, parseChartContract, type ChartContract } from "./ChartView";
 import { MediaArtifact } from "./MediaArtifact";
 import { MermaidArtifact } from "./MermaidArtifact";
+import { UiArtifact } from "./UiArtifact";
 import { Icon } from "../components/Icon";
 import { PreviewTopBar } from "./PreviewTopBar";
 import { getFollow, setFollow } from "./followStore";
@@ -37,6 +38,7 @@ const TYPE_META: Record<string, { label: string; icon: string; dark: string; lig
   markdown: { label: "Markdown", icon: "uil:file-alt", dark: "#64b5f6", light: "#1565c0" },
   chart: { label: "Chart", icon: "uil:chart", dark: "#9575cd", light: "#5e35b1" },
   mermaid: { label: "Diagram", icon: "uil:sitemap", dark: "#4db6ac", light: "#00796b" },
+  ui: { label: "UI", icon: "uil:apps", dark: "#81c784", light: "#2e7d32" },
   image: { label: "Image", icon: "uil:image", dark: "#ffb74d", light: "#ef6c00" },
   video: { label: "Video", icon: "uil:video", dark: "#f06292", light: "#c2185b" },
 };
@@ -333,6 +335,15 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
                     </div>
                     <div className="aur-stack3__caption aur-stack3__captionmono">
                       push_mermaid · rendered client-side, house theme
+                    </div>
+                  </div>
+                ) : current.type === "ui" ? (
+                  <div className="aur-stack3__pane-card">
+                    <div className="aur-stack3__cardbox aur-ui__pane">
+                      <UiArtifact content={current.content} />
+                    </div>
+                    <div className="aur-stack3__caption aur-stack3__captionmono">
+                      push_ui · composed with the aurora component library
                     </div>
                   </div>
                 ) : current.type === "image" || current.type === "video" ? (
