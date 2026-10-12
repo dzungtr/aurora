@@ -124,6 +124,37 @@ describe("push_ui", () => {
     expect(Array.isArray(listed) ? listed.length : 0).toBe(0);
   });
 
+  it("composed dashboard with chart, diagram, and text pushes as one artifact (issue #40)", async () => {
+    const program = [
+      'root = Stack([t1, c1, m1], "column")',
+      't1 = Text("Quarterly revenue")',
+      'c1 = Chart("pie", {kind: "pie", points: [{label: "Q1", value: 12}, {label: "Q2", value: 9}]})',
+      'm1 = Mermaid("flowchart TD\\n  A-->B")',
+    ].join("\n");
+    const res = await pushUi({ session_id: "ui-compose", title: "Composed dashboard", program });
+    expect(res.isError).toBeUndefined();
+    const sc = res.structuredContent as any;
+    const fetched = await (
+      await fetch(`${BASE}/api/preview/sessions/ui-compose/artifacts/${sc.artifact_id}`)
+    ).json();
+    expect(fetched.meta.type).toBe("ui");
+    expect(fetched.content).toContain("Chart(\"pie\"");
+    expect(fetched.content).toContain("Mermaid(");
+  });
+
+  it("chart kind mismatch inside a program is rejected with the single-chart tool's exact error", async () => {
+    const program = [
+      'root = Stack([c1], "column")',
+      'c1 = Chart("bar", {kind: "pie", points: [{label: "A", value: 1}]})',
+    ].join("\n");
+    const res = await pushUi({ session_id: "ui-chart-bad", title: "Bad chart", program });
+    expect(res.isError).toBe(true);
+    // Verbatim chartContractError message, identical to push_chart's rejection.
+    expect((res.content as any)[0].text).toContain(
+      'chart_type "bar" requires data of kind "categorical" (got "pie")'
+    );
+  });
+
   it("statement cap rejection surfaces an actionable error", async () => {
     const program = [`root = Stack([c0], "column")`, `c0 = Card([t0])`]
       .concat(Array.from({ length: 200 }, (_, i) => `t${i} = Text("x")`))
