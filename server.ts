@@ -135,7 +135,14 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
   const liveBus = new LiveBus();
   let generation: GenerationOptions | undefined = options.generation;
   if (generation === undefined && process.env.OPENROUTER_API_KEY) {
-    generation = { apiKey: process.env.OPENROUTER_API_KEY, baseUrl: "https://openrouter.ai/api/v1" };
+    generation = {
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseUrl: "https://openrouter.ai/api/v1",
+      // Operator model whitelist file ({"image":[...],"video":[...]}) — bounds
+      // the create_image / create_video schema enums. Optional; omit for the
+      // built-in defaults.
+      ...(process.env.AURORA_WHITELIST_PATH ? { whitelistPath: process.env.AURORA_WHITELIST_PATH } : {}),
+    };
   }
   if (generation) {
     startCatalogRefresh(generation);
