@@ -142,6 +142,10 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
     startVideoJobService(generation, artifactStore, liveBus);
   }
   const externalPort = process.env.AURORA_PUBLIC_PORT ? Number(process.env.AURORA_PUBLIC_PORT) : port;
+  // Base URL used in MCP tool results (deep_link). Overridable so deployments
+  // behind a reverse proxy / ingress advertise their public host instead of
+  // the loopback bind address.
+  const publicBaseUrl = process.env.AURORA_PUBLIC_URL ?? `http://127.0.0.1:${externalPort}`;
   return Bun.serve({
     port,
     // Defaults to loopback-only, matching aurora's "binds to localhost only"
@@ -165,7 +169,7 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
       "/mcp": {
         async POST(req) {
           try {
-            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`, options.mediaSizeCap, liveBus, generation);
+            return await handleMcpRequest(req, artifactStore, publicBaseUrl, options.mediaSizeCap, liveBus, generation);
           } catch (err) {
             console.error(err);
             return errorResponse(500, "MCP handler error");
