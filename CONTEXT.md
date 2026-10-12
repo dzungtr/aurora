@@ -35,6 +35,24 @@ _Avoid_: skin, template
 **Chart contract**:
 The per-`chart_type` data shape accepted by `push_chart`, translated to chart-lib options by a pure function.
 
+### Agent-composed UI
+
+**UI artifact**:
+An artifact whose snapshot is an OpenUI Lang program composed against the aurora component library; rendered client-side with the house theme.
+_Avoid_: dashboard, page, screen
+
+**Component library**:
+The aurora-defined component set (with Zod schemas) agents may compose into a UI artifact; the single source of truth for validation and the generated `push_ui` description.
+_Avoid_: design system, widget set, default library
+
+**Program**:
+The OpenUI Lang source that is a UI artifact's snapshot; lines of `identifier = Expression` statements.
+_Avoid_: spec, layout, source file
+
+**Patch**:
+A push mode sending only changed statements; merged server-side into a new full-program snapshot, never stored as a delta.
+_Avoid_: diff, delta, partial update
+
 ### Live preview
 
 **Live bus**:
