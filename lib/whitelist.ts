@@ -25,6 +25,12 @@ export interface WhitelistModelEntry {
 export interface GenerationWhitelist {
   image: WhitelistModelEntry[];
   video: WhitelistModelEntry[];
+  /**
+   * Optional base URL (e.g. a remote ingress) used for preview deep links
+   * returned by MCP tools. When absent, the request's own Host / forwarded
+   * headers are used, falling back to loopback + external port.
+   */
+  publicUrl?: string;
 }
 
 export interface ModelCatalogInfo {
@@ -104,7 +110,7 @@ export function loadWhitelist(configPath: string = defaultGenerationConfigPath()
         out[modality] = DEFAULT_WHITELIST[modality];
       }
     }
-    return out;
+    return { ...out, publicUrl: loadConfigPublicUrl(parsed) };
   } catch (err) {
     console.error(`whitelist: ignoring invalid generation config at ${configPath}:`, err);
     return DEFAULT_WHITELIST;
@@ -126,6 +132,20 @@ function formatPriceHint(entry: WhitelistModelEntry, catalog: Map<string, ModelC
   if (hint) return ` (~${hint})`;
   if (entry.note) return ` (${entry.note})`;
   return "";
+}
+
+/** The config's publicUrl field, when a non-empty string. */
+function loadConfigPublicUrl(parsed: Partial<GenerationWhitelist>): string | undefined {
+  return typeof parsed.publicUrl === "string" && parsed.publicUrl.length > 0 ? parsed.publicUrl : undefined;
+}
+
+/**
+ * Operator's public base URL for preview deep links, from the generation
+ * config's publicUrl field (undefined when unset or the config is missing).
+ * Re-read per request so config edits apply without a server restart.
+ */
+export function loadPublicUrl(configPath: string = defaultGenerationConfigPath()): string | undefined {
+  return loadWhitelist(configPath).publicUrl;
 }
 
 /**

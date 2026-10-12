@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, resolvePublicBaseUrl } from "./server";
+import { loadPublicUrl } from "./lib/whitelist";
 
 let root: string;
 let server: ReturnType<typeof createServer>;
@@ -203,5 +204,26 @@ describe("resolvePublicBaseUrl", () => {
     expect(resolvePublicBaseUrl(req({ host: "internal:7634" }), 7634, "https://aurora.ts.net/")).toBe(
       "https://aurora.ts.net",
     );
+  });
+});
+
+describe("loadPublicUrl (generation config)", () => {
+  let cfg: string;
+  beforeEach(() => {
+    cfg = mkdtempSync(join(tmpdir(), "aurora-cfg-"));
+  });
+  afterEach(() => {
+    rmSync(cfg, { recursive: true, force: true });
+  });
+
+  it("reads publicUrl from the generation config file", () => {
+    writeFileSync(join(cfg, "gen.json"), JSON.stringify({ publicUrl: "https://aurora.ts.net" }));
+    expect(loadPublicUrl(join(cfg, "gen.json"))).toBe("https://aurora.ts.net");
+  });
+
+  it("returns undefined when the config is missing or has no publicUrl", () => {
+    expect(loadPublicUrl(join(cfg, "missing.json"))).toBeUndefined();
+    writeFileSync(join(cfg, "no-url.json"), JSON.stringify({ image: [] }));
+    expect(loadPublicUrl(join(cfg, "no-url.json"))).toBeUndefined();
   });
 });

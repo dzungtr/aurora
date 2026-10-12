@@ -92,6 +92,8 @@ All artifacts are **immutable snapshots** copied into `~/.local/share/aurora/art
 | `--port` | `7634` | HTTP + MCP port |
 | `AURORA_HOST` | `127.0.0.1` | Bind address (container images set `0.0.0.0`) |
 
+Preview deep links returned by MCP tools use, in order of precedence: `publicUrl` from the generation config (`~/.config/aurora/generation.json`, e.g. a remote ingress URL), the request's `Host` / forwarded headers, then `http://127.0.0.1:<port>`.
+
 ## Docs
 
 - [ADR 0001 — MCP over Streamable HTTP, single instance](docs/adr/0001-single-instance-streamable-http-mcp.md)
