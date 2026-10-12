@@ -3,8 +3,9 @@
 // from these component definitions (never hand-written) and push-time
 // validation parses against this same library, so docs and validation cannot
 // drift. All OpenUI imports live here — the swap boundary.
-// v1 scope (tracer bullet): layout + card + text only. Chart/Mermaid land
-// with issue #40.
+// Chart (issue #40) wraps the existing chart data contract verbatim — the
+// same zod schemas and validation errors as push_chart — and the Mermaid
+// component wraps the existing mermaid render path (src/preview/MermaidView).
 import { z } from "zod";
 import {
   createLibrary,
@@ -12,6 +13,9 @@ import {
   defineComponent,
   generateSystemPrompt,
 } from "@openuidev/react-lang";
+import { CHART_TYPES, chartContractError, chartDataSchema, type ChartData, type ChartType } from "./chartContract";
+import { ChartView } from "../src/preview/ChartView";
+import { MermaidView } from "../src/preview/MermaidView";
 
 /** The text content string cap: no single string literal may exceed this. */
 export const MAX_STRING_LENGTH = 10_000;
@@ -21,17 +25,52 @@ export const MAX_STATEMENTS = 200;
 /** A line of text content. Use for titles, captions, and narrative. */
 export const Text = defineComponent({
   name: "Text",
-  description: "A line of text content. Use for titles, captions, and narrative lines.",
+  description: "A line of text.",
   props: z.object({
     content: z.string().describe("The text to display"),
   }),
   component: (p: any) => <p className="aur-ui__text">{p.props.content}</p>,
 });
 
+/**
+ * A chart rendered with the house theme. The data payload is the existing
+ * push_chart contract VERBATIM (lib/chartContract.ts) — same shapes, same
+ * rejection set; agents learn nothing new for data payloads. The render path
+ * is the same chartToOption translation + ECharts used by standalone charts,
+ * so house styling is shared, never restyled.
+ */
+export const Chart = defineComponent({
+  name: "Chart",
+  description: "House-themed chart from the push_chart data contract.",
+  props: z.object({
+    chart_type: z.enum(CHART_TYPES).describe("Chart kind aurora renders under its house theme"),
+    data: chartDataSchema.describe(
+      "The push_chart data contract; `kind` must match chart_type (categorical for bar/column, line for line/area)"
+    ),
+  }),
+  component: (p: any) => (
+    <ChartView contract={{ chart_type: p.props.chart_type, data: p.props.data }} />
+  ),
+});
+
+/**
+ * A mermaid diagram rendered through the existing render path with the house
+ * theme; render failures surface as the visible error block. Newlines in the
+ * source are written as \\n escapes inside a quoted string.
+ */
+export const Mermaid = defineComponent({
+  name: "Mermaid",
+  description: "House-themed mermaid diagram; newlines in source as \\n escapes.",
+  props: z.object({
+    source: z.string().describe("Mermaid diagram source (flowchart, sequence, …); newlines as \\n escapes"),
+  }),
+  component: (p: any) => <MermaidView source={p.props.source} />,
+});
+
 /** A bordered card grouping child elements. */
 export const Card = defineComponent({
   name: "Card",
-  description: "A bordered card grouping child elements (Text children).",
+  description: "Bordered card of Text children.",
   props: z.object({
     children: z.array(Text.ref).describe("Card contents"),
   }),
@@ -41,9 +80,9 @@ export const Card = defineComponent({
 /** Layout container arranging children in a row or column. */
 export const Stack = defineComponent({
   name: "Stack",
-  description: "Layout container arranging children (Card, Text, or nested Stack) in a direction.",
+  description: "Layout container (row or column).",
   props: z.object({
-    children: z.array(z.union([Card.ref, Text.ref])).describe("Child elements"),
+    children: z.array(z.union([Card.ref, Text.ref, Chart.ref, Mermaid.ref])).describe("Child elements"),
     direction: z.enum(["row", "column"]).describe("Layout direction"),
   }),
   component: (p: any) => (
@@ -60,7 +99,7 @@ export const Stack = defineComponent({
  * definition.
  */
 export const auroraUiLibrary = createLibrary({
-  components: [Stack, Card, Text],
+  components: [Stack, Card, Text, Chart, Mermaid],
   root: "Stack",
 });
 
@@ -183,6 +222,23 @@ export function validateUiProgram(source: string): UiProgramError[] {
   const result = parser.parse(source);
   const shape = (e: { component?: string; path?: string; message: string }) =>
     `${e.component ?? "program"}${e.path && e.path !== "" ? ` at "${e.path}"` : ""}: ${e.message}`;
+  // Chart kind coherence (issue #40): the single-chart tool rejects a
+  // chart_type/data mismatch with chartContractError — the SAME check and
+  // message run here, so the chart contract behaves verbatim inside a program.
+  collectChartNodes(result.root).forEach((node) => {
+    const { chart_type, data } = node.props as { chart_type?: ChartType; data?: ChartData };
+    if (!chart_type || !data) return; // shape errors already reported by the parser
+    const contractError = chartContractError(chart_type, data);
+    if (contractError) {
+      errors.push({
+        line: node.statementId ? lineOfStatement(source, node.statementId) : undefined,
+        statementId: node.statementId,
+        code: "chart-contract",
+        message: `${contractError}. Use the push_chart data contract for the "${chart_type}" chart_type.`,
+      });
+    }
+  });
+
   for (const e of result.meta.errors) {
     const line = e.statementId ? lineOfStatement(source, e.statementId) : undefined;
     errors.push({
@@ -218,20 +274,36 @@ export function validateUiProgram(source: string): UiProgramError[] {
   return errors;
 }
 
+/** Parsed element node shape (subset) used to walk a program tree. */
+interface ParsedNode {
+  type?: string;
+  typeName?: string;
+  statementId?: string;
+  props?: Record<string, unknown> & { children?: unknown };
+}
+
+/** Depth-first collection of Chart element nodes from a parsed program tree. */
+function collectChartNodes(node: unknown, out: ParsedNode[] = []): ParsedNode[] {
+  if (!node || typeof node !== "object") return out;
+  const n = node as ParsedNode;
+  if (n.type === "element" && n.typeName === "Chart") out.push(n);
+  const children = n.props?.children;
+  if (Array.isArray(children)) for (const c of children) collectChartNodes(c, out);
+  return out;
+}
+
 /**
  * Worked example embedded in the generated description (single source of
  * truth with validation — the example must parse cleanly against this
  * library; the test suite enforces that).
  */
-export const WORKED_EXAMPLE = `root = Stack([card1, card2], "row")
-card1 = Card([t1])
-t1 = Text("Revenue by quarter: $1.2M")
-card2 = Card([t2])
-t2 = Text("Down 8% versus last quarter")`;
+export const WORKED_EXAMPLE = `root = Stack([c, m], "column")
+c = Chart("pie", {kind: "pie", points: [{label: "Q1", value: 12}]})
+m = Mermaid("flowchart TD\\nA-->B")`;
 
 /** Cross-guidance appended to the generated prompt (also present on push_chart). */
 export const PUSH_UI_CROSS_GUIDANCE =
-  'Use push_chart for a single chart artifact; use push_ui when composing layout (Stack/Card) or weaving text between content blocks in one artifact.';
+  'push_chart: one chart artifact. push_ui: composed dashboards (layout, multiple charts/diagrams, or text).';
 
 /**
  * Generate the push_ui tool description from the library definition itself.

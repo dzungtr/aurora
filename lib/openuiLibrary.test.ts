@@ -67,6 +67,38 @@ lost = Text("dropped")`;
     expect(errors.some((x) => x.statementId === "missing")).toBe(true);
   });
 
+  test("chart contract accepted verbatim: every chart kind parses cleanly (issue #40)", () => {
+    const src = [
+      'root = Stack([pie1, bar1, line1, scat1, m1], "column")',
+      'pie1 = Chart("pie", {kind: "pie", points: [{label: "A", value: 1}]})',
+      'bar1 = Chart("bar", {kind: "categorical", categories: ["x", "y"], series: [{name: "s", values: [1, 2]}]})',
+      'line1 = Chart("line", {kind: "line", x: ["a", "b"], series: [{name: "s", values: [1, 2]}]})',
+      'scat1 = Chart("scatter", {kind: "scatter", series: [{name: "s", points: [[1, 2], [3, 4]]}]})',
+      'm1 = Mermaid("flowchart TD\\n  A-->B")',
+    ].join("\n");
+    expect(validateUiProgram(src)).toEqual([]);
+  });
+
+  test("chart kind mismatch: the SAME error string as the single-chart tool (chartContractError)", () => {
+    const src = 'root = Stack([c], "column")\nc = Chart("bar", {kind: "pie", points: [{label: "A", value: 1}]})';
+    const errors = validateUiProgram(src);
+    const e = errors.find((x) => x.statementId === "c");
+    expect(e).toBeDefined();
+    expect(e!.code).toBe("chart-contract");
+    // verbatim message from lib/chartContract.ts, exactly as push_chart returns it
+    expect(e!.message).toContain('chart_type "bar" requires data of kind "categorical" (got "pie")');
+    expect(e!.line).toBe(2);
+  });
+
+  test("mermaid newlines: \\n escapes in the source string become real newlines", () => {
+    const src = 'root = Stack([m], "column")\nm = Mermaid("flowchart TD\\n  A-->B")';
+    const parser = createParser(auroraUiLibrary.toJSONSchema());
+    const result = parser.parse(src);
+    expect(result.meta.errors).toHaveLength(0);
+    const props = (result.root as any)?.props?.children?.[0]?.props;
+    expect(props.source).toBe("flowchart TD\n  A-->B");
+  });
+
   test("statement cap: 201 statements rejected with an actionable message", () => {
     const lines = [`root = Stack([c0], "column")`, `c0 = Card([t0])`];
     // Extra sibling cards not in root stay orphaned — the cap fires before
@@ -99,7 +131,7 @@ lost = Text("dropped")`;
 
 describe("countStatements", () => {
   test("counts depth-0 assignments, ignoring brackets, strings, and == ", () => {
-    expect(countStatements(VALID)).toBe(5);
+    expect(countStatements(VALID)).toBe(3);
     expect(
       countStatements('root = Stack([t], "column")\nt = Text("a = b")\nx = Text("=not-a-statement=")')
     ).toBe(3);
