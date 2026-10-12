@@ -129,6 +129,25 @@ function startVideoJobService(generation: GenerationOptions, store: ArtifactStor
   }
 }
 
+/**
+ * Resolve the base URL used in preview deep links returned by MCP tools.
+ *
+ * Precedence:
+ * 1. AURORA_PUBLIC_URL env override (full URL, e.g. a remote ingress).
+ * 2. The request's own Host header (plus X-Forwarded-Proto when present),
+ *    so agents connecting via a remote ingress get links reachable by them.
+ * 3. Fallback to loopback with the external (published) port.
+ */
+export function resolvePublicBaseUrl(req: Request, externalPort: number, publicUrl?: string): string {
+  if (publicUrl) return publicUrl.replace(/\/+$/, "");
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  if (host) {
+    const proto = req.headers.get("x-forwarded-proto") ?? "http";
+    return `${proto}://${host}`;
+  }
+  return `http://127.0.0.1:${externalPort}`;
+}
+
 export function createServer(rootDir: string, port: number, options: ServerOptions = {}) {
   const root = resolve(rootDir);
   const artifactStore = new ArtifactStore(options.artifactsDir ?? join(homedir(), ".local/share/aurora/artifacts"));
@@ -142,6 +161,7 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
     startVideoJobService(generation, artifactStore, liveBus);
   }
   const externalPort = process.env.AURORA_PUBLIC_PORT ? Number(process.env.AURORA_PUBLIC_PORT) : port;
+  const publicUrl = process.env.AURORA_PUBLIC_URL;
   return Bun.serve({
     port,
     // Defaults to loopback-only, matching aurora's "binds to localhost only"
@@ -165,7 +185,7 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
       "/mcp": {
         async POST(req) {
           try {
-            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`, options.mediaSizeCap, liveBus, generation);
+            return await handleMcpRequest(req, artifactStore, resolvePublicBaseUrl(req, externalPort, publicUrl), options.mediaSizeCap, liveBus, generation);
           } catch (err) {
             console.error(err);
             return errorResponse(500, "MCP handler error");
