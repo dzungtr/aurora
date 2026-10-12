@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { ArtifactStore, InvalidArtifactIdError } from "./lib/artifactStore";
 import { LiveBus } from "./lib/liveBus";
 import { handleMcpRequest, type GenerationOptions } from "./lib/mcpSurface";
+import { loadPublicUrl } from "./lib/whitelist";
 import { OpenRouterClient, priceHintForEntry, videoPriceHintForEntry } from "./lib/openrouter";
 import { JobRegistry } from "./lib/jobRegistry";
 import { VideoJobService } from "./lib/videoGeneration";
@@ -129,6 +130,19 @@ function startVideoJobService(generation: GenerationOptions, store: ArtifactStor
   }
 }
 
+/**
+ * Resolve the base URL used in preview deep links returned by MCP tools.
+ *
+ * Precedence:
+ * 1. publicUrl from the generation config (~/.config/aurora/generation.json),
+ *    re-read per request (e.g. a remote ingress).
+ * 2. Fallback to loopback with the external (published) port.
+ */
+export function resolvePublicBaseUrl(externalPort: number, publicUrl?: string): string {
+  if (publicUrl) return publicUrl.replace(/\/+$/, "");
+  return `http://127.0.0.1:${externalPort}`;
+}
+
 export function createServer(rootDir: string, port: number, options: ServerOptions = {}) {
   const root = resolve(rootDir);
   const artifactStore = new ArtifactStore(options.artifactsDir ?? join(homedir(), ".local/share/aurora/artifacts"));
@@ -165,7 +179,7 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
       "/mcp": {
         async POST(req) {
           try {
-            return await handleMcpRequest(req, artifactStore, `http://127.0.0.1:${externalPort}`, options.mediaSizeCap, liveBus, generation);
+            return await handleMcpRequest(req, artifactStore, resolvePublicBaseUrl(externalPort, loadPublicUrl()), options.mediaSizeCap, liveBus, generation);
           } catch (err) {
             console.error(err);
             return errorResponse(500, "MCP handler error");
