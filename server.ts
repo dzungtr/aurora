@@ -311,7 +311,38 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
             const abs = resolveSafe(root, path);
             const file = Bun.file(abs);
             if (!(await file.exists())) return errorResponse(404, "Not found");
-            return new Response(file);
+            const size = file.size;
+            const baseHeaders: Record<string, string> = {
+              "accept-ranges": "bytes",
+            };
+            const range = req.headers.get("range");
+            const m = range?.match(/^bytes=(\d*)-(\d*)$/);
+            if (m && (m[1] !== "" || m[2] !== "")) {
+              let start = m[1] === "" ? null : Number(m[1]);
+              let end = m[2] === "" ? null : Number(m[2]);
+              if (start === null) {
+                // suffix range: last N bytes
+                start = Math.max(0, size - (end ?? 0));
+                end = size - 1;
+              } else if (end === null || end >= size) {
+                end = size - 1;
+              }
+              if (start >= size || start > end) {
+                return new Response(null, {
+                  status: 416,
+                  headers: { "content-range": `bytes */${size}` },
+                });
+              }
+              return new Response(file.slice(start, end + 1), {
+                status: 206,
+                headers: {
+                  ...baseHeaders,
+                  "content-range": `bytes ${start}-${end}/${size}`,
+                  "content-length": String(end - start + 1),
+                },
+              });
+            }
+            return new Response(file, { headers: baseHeaders });
           } catch (err) {
             return handleError(err);
           }
