@@ -20,11 +20,16 @@ export interface WhitelistModelEntry {
   durations?: number[];
   /** Video models: whether the model can generate audio alongside video */
   supports_audio?: boolean;
+  /** Speech models: voice filled from this when the tool call omits `voice` */
+  default_voice?: string;
+  /** Speech models: whether input_references voice-clone clips are accepted */
+  supports_voice_cloning?: boolean;
 }
 
 export interface GenerationWhitelist {
   image: WhitelistModelEntry[];
   video: WhitelistModelEntry[];
+  speech: WhitelistModelEntry[];
   /**
    * Optional base URL (e.g. a remote ingress) used for preview deep links
    * returned by MCP tools. When absent, the request's own Host / forwarded
@@ -45,6 +50,25 @@ export const DEFAULT_WHITELIST: GenerationWhitelist = {
       id: "google/gemini-2.5-flash-image",
       note: "fast, low-cost image generation (nano-banana tier)",
       default: true,
+    },
+  ],
+  speech: [
+    {
+      id: "hexgrad/kokoro-82m",
+      note: "cheap-tier text-to-speech",
+      default: true,
+      default_voice: "af_heart",
+    },
+    {
+      id: "google/gemini-3.8-flash-tts",
+      note: "flash-tier text-to-speech",
+      default_voice: "Kore",
+    },
+    {
+      id: "elevenlabs/eleven-v4",
+      note: "voice-cloning text-to-speech",
+      default_voice: "Rachel",
+      supports_voice_cloning: true,
     },
   ],
   video: [
@@ -78,6 +102,8 @@ function normalizeEntry(raw: unknown): WhitelistModelEntry | null {
       qualities: e.qualities,
       durations: Array.isArray(e.durations) ? e.durations : undefined,
       supports_audio: typeof e.supports_audio === "boolean" ? e.supports_audio : undefined,
+      default_voice: typeof e.default_voice === "string" ? e.default_voice : undefined,
+      supports_voice_cloning: typeof e.supports_voice_cloning === "boolean" ? e.supports_voice_cloning : undefined,
     };
   }
   return null;
@@ -98,8 +124,8 @@ export function loadWhitelist(configPath: string = defaultGenerationConfigPath()
   }
   try {
     const parsed = JSON.parse(raw) as Partial<GenerationWhitelist>;
-    const out: GenerationWhitelist = { image: [], video: [] };
-    for (const modality of ["image", "video"] as const) {
+    const out: GenerationWhitelist = { image: [], video: [], speech: [] };
+    for (const modality of ["image", "video", "speech"] as const) {
       const list = parsed[modality];
       if (Array.isArray(list)) {
         for (const entry of list) {
@@ -188,6 +214,41 @@ export function buildImageToolDescription(
     hints +
     ". Optional resolution/aspect_ratio/quality are validated against the model's capabilities before submission."
   );
+}
+
+/**
+ * Build the create_speech tool description. Speech is priced per input
+ * character (spec #55 decision 9); model ids come from the speech whitelist.
+ */
+export function buildSpeechToolDescription(whitelist: GenerationWhitelist): string {
+  const hints = whitelist.speech
+    .map((m) => {
+      const cloning = m.supports_voice_cloning ? " [voice cloning]" : "";
+      return `${m.id}${formatPriceHint(m, new Map())}${cloning}${m.default ? " [default]" : ""}`;
+    })
+    .join("; ");
+  return (
+    "Generate one speech audio artifact from text via OpenRouter's /audio/speech endpoint " +
+    "and snapshot it into the session. Priced per input character; pennies per call. " +
+    "Speech models at build of this description: " +
+    hints +
+    ". Voice cloning references require a model that supports them."
+  );
+}
+
+/**
+ * Pre-flight validation of create_speech voice-cloning references against
+ * the model's whitelist entry (spec #55 story 17): cloning references on a
+ * model without the capability fail fast with an actionable error.
+ */
+export function speechCloningPreflightError(entry: WhitelistModelEntry, hasReferences: boolean): string | null {
+  if (hasReferences && entry.supports_voice_cloning !== true) {
+    return (
+      `model ${entry.id} does not support voice cloning. ` +
+      "Omit input_references or choose a cloning-capable speech model (supports_voice_cloning on the whitelist)."
+    );
+  }
+  return null;
 }
 
 /** Video generation params subject to pre-flight validation. */

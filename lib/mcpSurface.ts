@@ -15,11 +15,13 @@ import {
 import { mergeStatements } from "@openuidev/react-lang";
 import {
   buildImageToolDescription,
+  buildSpeechToolDescription,
   buildVideoToolDescription,
   defaultGenerationConfigPath,
   loadWhitelist,
   modelIds,
   preflightParamError,
+  speechCloningPreflightError,
   videoPreflightError,
   type GenerationWhitelist,
   type ModelCatalogInfo,
@@ -27,7 +29,8 @@ import {
 } from "./whitelist";
 import { OpenRouterClient } from "./openrouter";
 import type { JobRegistry } from "./jobRegistry";
-import { resolveReference, type ReferenceInput } from "./referenceResolver";
+import { resolveReference, type ReferenceInput, type ReferenceModality } from "./referenceResolver";
+import { sniffAudioMime } from "./audioMime";
 import type { VideoJobService } from "./videoGeneration";
 
 /**
@@ -161,6 +164,146 @@ function registerCreateImageTool(
             deep_link,
             model,
             cost: generated.cost,
+            job_id,
+          },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+}
+
+function registerCreateSpeechTool(
+  server: McpServer,
+  store: ArtifactStore,
+  baseUrl: string,
+  mediaSizeCap: number,
+  liveBus: LiveBus | undefined,
+  generation: GenerationOptions
+) {
+  const whitelist = resolveWhitelist(generation);
+  const client = new OpenRouterClient({ apiKey: generation.apiKey, baseUrl: generation.baseUrl });
+  server.registerTool(
+    "create_speech",
+    {
+      title: "Generate speech",
+      description: buildSpeechToolDescription(whitelist),
+      inputSchema: {
+        session_id: ID_SCHEMA.describe("Session id; agent-minted, unique per agent run"),
+        title: z.string().min(1).describe("Human-visible artifact title"),
+        input: z.string().min(1).describe("Text to speak; priced per input character"),
+        model: z
+          .enum(modelIds(whitelist.speech) as [string, ...string[]])
+          .describe("OpenRouter speech model from the active whitelist"),
+        voice: z
+          .string()
+          .optional()
+          .describe("Provider voice id; omitted voices fill from the model's whitelist default_voice"),
+        instructions: z.string().optional().describe("Delivery style guidance, passed through to the provider"),
+        speed: z.number().positive().optional().describe("Playback speed multiplier, passed through to the provider"),
+        response_format: z
+          .enum(["mp3", "wav"])
+          .default("mp3")
+          .describe("Audio container for the generated speech (pcm excluded: unplayable in the browser)") as any,
+        input_references: z
+          .array(SPEECH_REFERENCE_SCHEMA)
+          .max(3)
+          .optional()
+          .describe(
+            "Optional voice-cloning clips (1-3; audio artifacts, files, base64, or urls, each with an optional transcript); requires a cloning-capable model"
+          ),
+        artifact_id: OPTIONAL_ID_SCHEMA,
+        session_title: SESSION_TITLE_SCHEMA,
+      },
+    },
+    async ({
+      session_id,
+      title,
+      input,
+      model,
+      voice,
+      instructions,
+      speed,
+      response_format,
+      input_references,
+      artifact_id,
+      session_title,
+    }) => {
+      try {
+        const entry: WhitelistModelEntry | undefined = resolveWhitelist(generation).speech.find(
+          (m) => m.id === model
+        );
+        if (!entry) return toolError(`model ${model} is not on the active whitelist`);
+        // Voice-cloning preflight (spec #55 story 17): fail fast and legibly
+        // before any provider spend.
+        const refs = (input_references ?? []) as ReferenceInput[];
+        const cloningError = speechCloningPreflightError(entry, refs.length > 0);
+        if (cloningError) return toolError(cloningError);
+        // Omitted voice fills from the whitelist entry; without it the
+        // provider 400s (verified live during the design session).
+        const resolvedVoice = voice ?? entry.default_voice;
+        const resolved = [];
+        const transcripts: string[] = [];
+        for (const ref of refs) {
+          // Speech references are modality-aware: audio artifacts/clips are
+          // accepted (images stay on the image path).
+          resolved.push((await resolveReference(ref, store, mediaSizeCap, "speech")).dataUrl);
+          if (ref.transcript !== undefined) transcripts.push(ref.transcript);
+        }
+        const generated = await client.generateSpeech({
+          model,
+          input,
+          voice: resolvedVoice,
+          instructions,
+          speed,
+          response_format: response_format ?? "mp3",
+          references: resolved.length > 0 ? resolved : undefined,
+          referenceTranscripts: transcripts.length > 0 ? transcripts : undefined,
+        });
+        const result = await store.pushMedia({
+          session_id,
+          title,
+          type: "audio",
+          source: {
+            base64: Buffer.from(generated.bytes).toString("base64"),
+            // Sniffed from bytes at push; content-type header is the fallback.
+            mime: generated.mime,
+          },
+          artifact_id,
+          session_title,
+        });
+        liveBus?.broadcast(artifactEvent(result));
+        const { artifact, created } = result;
+        // Speech jobs complete inline but are recorded in the registry so
+        // check_generation can look them up like any other generation job.
+        let job_id: string | undefined;
+        if (generation.jobRegistry) {
+          job_id = `speech-${crypto.randomUUID()}`;
+          generation.jobRegistry.createJob({
+            job_id,
+            session_id,
+            target_artifact_id: artifact_id,
+            title,
+            model,
+            prompt: input,
+          });
+          generation.jobRegistry.updateJob(job_id, {
+            status: "completed",
+            artifact_id: artifact.artifact_id,
+          });
+        }
+        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
+        const text = `${created ? "Generated" : "Replaced"} speech artifact ${artifact.artifact_id} in session ${session_id} with ${model}${resolvedVoice ? ` (voice ${resolvedVoice})` : ""}. Preview: ${deep_link}`;
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: {
+            session_id,
+            artifact_id: artifact.artifact_id,
+            created,
+            deep_link,
+            model,
+            ...(resolvedVoice !== undefined ? { voice: resolvedVoice } : {}),
             job_id,
           },
         };
@@ -387,6 +530,15 @@ const REFERENCE_SCHEMA = z
 const REFERENCE_ROLES = z
   .enum(["style", "first_frame", "last_frame"])
   .describe("Reference role; defaults to style");
+
+/**
+ * Speech voice-cloning reference entry (spec #57): the shared reference
+ * schema plus an optional per-clip transcript forwarded as a paired text
+ * part; resolver accepts audio clips on the speech modality.
+ */
+const SPEECH_REFERENCE_SCHEMA = REFERENCE_SCHEMA.extend({
+  transcript: z.string().optional().describe("Optional clip transcript forwarded to the model alongside the audio"),
+});
 
 /** Resolve every reference entry to an inline data URL for the provider. */
 async function resolveReferences(
@@ -668,6 +820,10 @@ export async function handleMcpRequest(
   // configured (env var read once at server start, or injected via options).
   if (generation?.apiKey) {
     registerCreateImageTool(server, store, baseUrl, mediaSizeCap, liveBus, generation);
+    // Speech needs at least one whitelisted speech model for a valid enum.
+    if (modelIds(resolveWhitelist(generation).speech).length > 0) {
+      registerCreateSpeechTool(server, store, baseUrl, mediaSizeCap, liveBus, generation);
+    }
     // The video tool needs the boot-owned poller service (submit-and-notify);
     // it also needs at least one whitelisted video model for a valid enum.
     if (generation.videoService && modelIds(resolveWhitelist(generation).video).length > 0) {

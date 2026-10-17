@@ -30,6 +30,27 @@ export interface ImageGenerationResult {
   cost?: number;
 }
 
+export interface SpeechGenerationParams {
+  model: string;
+  input: string;
+  voice?: string;
+  instructions?: string;
+  speed?: number;
+  response_format: "mp3" | "wav";
+  /** Inline data URLs for voice-cloning reference clips */
+  references?: string[];
+  /** Per-clip transcripts, paired with `references` for input_audio parts */
+  referenceTranscripts?: string[];
+}
+
+export interface SpeechGenerationResult {
+  bytes: Uint8Array;
+  /** Mime from the response content-type header */
+  mime: string;
+  /** Provider generation id, when the response carries one */
+  generationId?: string;
+}
+
 export interface ModelCatalogEntry {
   id: string;
   pricing?: {
@@ -103,6 +124,51 @@ export class OpenRouterClient {
     return {
       images: rawImages.map((u) => OpenRouterClient.parseDataUrl(u)),
       cost: typeof data?.usage?.cost === "number" ? data.usage.cost : undefined,
+    };
+  }
+
+  /**
+   * Synchronous text-to-speech via the dedicated OpenAI-compatible
+   * /audio/speech endpoint (spec #57). Returns raw audio bytes; the mime
+   * comes from the response content-type header. Provider errors pass
+   * through with their HTTP status so unknown voices surface to the agent.
+   */
+  async generateSpeech(params: SpeechGenerationParams): Promise<SpeechGenerationResult> {
+    const body: Record<string, unknown> = {
+      model: params.model,
+      input: params.input,
+      response_format: params.response_format,
+    };
+    if (params.voice !== undefined) body.voice = params.voice;
+    if (params.instructions !== undefined) body.instructions = params.instructions;
+    if (params.speed !== undefined) body.speed = params.speed;
+    // Voice cloning: the input becomes a multimodal content list — text part
+    // plus one input_audio part per reference clip, each optionally paired
+    // with its transcript as a text part.
+    if (params.references && params.references.length > 0) {
+      const parts: unknown[] = [{ type: "text", text: params.input }];
+      params.references.forEach((url, i) => {
+        const transcript = params.referenceTranscripts?.[i];
+        if (transcript) parts.push({ type: "text", text: transcript });
+        // OpenAI input_audio format is the bare audio subtype of the clip's mime.
+        const format = url.match(/^data:audio\/([^;]+);/)?.[1] ?? "wav";
+        parts.push({ type: "input_audio", input_audio: { data: url, format } });
+      });
+      body.input = parts;
+    }
+    const res = await fetch(`${this.config.baseUrl}/audio/speech`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`OpenRouter speech generation failed (${res.status}): ${text.slice(0, 500)}`);
+    }
+    return {
+      bytes: new Uint8Array(await res.arrayBuffer()),
+      mime: res.headers.get("content-type")?.split(";")[0] || "audio/mpeg",
+      generationId: res.headers.get("x-request-id") ?? undefined,
     };
   }
 
