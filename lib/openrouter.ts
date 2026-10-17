@@ -150,8 +150,9 @@ export class OpenRouterClient {
       params.references.forEach((url, i) => {
         const transcript = params.referenceTranscripts?.[i];
         if (transcript) parts.push({ type: "text", text: transcript });
-        // OpenAI input_audio format is the bare audio subtype of the clip's mime.
-        const format = url.match(/^data:audio\/([^;]+);/)?.[1] ?? "wav";
+        // OpenAI input_audio format is the bare audio subtype; mpeg clips are
+        // normalized to mp3 (OpenAI-style validation only accepts wav/mp3).
+        const format = (url.match(/^data:audio\/([^;]+);/)?.[1] ?? "wav").replace("mpeg", "mp3");
         parts.push({ type: "input_audio", input_audio: { data: url, format } });
       });
       body.input = parts;

@@ -204,8 +204,8 @@ function registerCreateSpeechTool(
         speed: z.number().positive().optional().describe("Playback speed multiplier, passed through to the provider"),
         response_format: z
           .enum(["mp3", "wav"])
-          .default("mp3")
-          .describe("Audio container for the generated speech (pcm excluded: unplayable in the browser)") as any,
+          .optional()
+          .describe("Audio container for the generated speech (pcm excluded: unplayable in the browser)"),
         input_references: z
           .array(SPEECH_REFERENCE_SCHEMA)
           .max(3)
@@ -244,12 +244,14 @@ function registerCreateSpeechTool(
         // provider 400s (verified live during the design session).
         const resolvedVoice = voice ?? entry.default_voice;
         const resolved = [];
-        const transcripts: string[] = [];
+        // Positional transcripts: undefined stays in place so referenceTranscripts[i]
+        // aligns with references[i] even when earlier clips omit their transcript.
+        const transcripts: (string | undefined)[] = [];
         for (const ref of refs) {
           // Speech references are modality-aware: audio artifacts/clips are
           // accepted (images stay on the image path).
           resolved.push((await resolveReference(ref, store, mediaSizeCap, "speech")).dataUrl);
-          if (ref.transcript !== undefined) transcripts.push(ref.transcript);
+          transcripts.push(ref.transcript);
         }
         const generated = await client.generateSpeech({
           model,
@@ -259,7 +261,7 @@ function registerCreateSpeechTool(
           speed,
           response_format: response_format ?? "mp3",
           references: resolved.length > 0 ? resolved : undefined,
-          referenceTranscripts: transcripts.length > 0 ? transcripts : undefined,
+          referenceTranscripts: transcripts.some((t) => t !== undefined) ? transcripts : undefined,
         });
         const result = await store.pushMedia({
           session_id,

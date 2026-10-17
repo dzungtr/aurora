@@ -309,6 +309,35 @@ describe("create_speech", () => {
     await client.close();
   });
 
+  it("pairs per-clip transcripts by position when an earlier reference omits its transcript", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    // First clip has no transcript; second clip does. The pairing must stay
+    // positional: the transcript text part precedes the second input_audio part.
+    const res = await client.callTool({
+      name: "create_speech",
+      arguments: {
+        session_id: "speech-agent",
+        title: "Sparse transcripts",
+        input: "mimic this voice",
+        model: "elevenlabs/eleven-v4",
+        input_references: [
+          { base64: Buffer.from(WAV_BYTES).toString("base64"), mime: "audio/wav" },
+          { base64: Buffer.from(MP3_BYTES).toString("base64"), mime: "audio/mpeg", transcript: "second clip transcript" },
+        ],
+      },
+    });
+    expect(res.isError).toBeFalsy();
+    const calls = fakeCalls.filter((c) => c.path === "/audio/speech" && c.body.model === "elevenlabs/eleven-v4");
+    const parts = calls[calls.length - 1]!.body.input;
+    expect(parts[0]).toEqual({ type: "text", text: "mimic this voice" });
+    expect(parts[1].type).toBe("input_audio");
+    expect(parts[2]).toEqual({ type: "text", text: "second clip transcript" });
+    expect(parts[3].type).toBe("input_audio");
+    expect(parts[3].input_audio.format).toBe("mp3");
+    await client.close();
+  });
+
   it("rejects an image artifact as a speech reference with a clear error", async () => {
     const { client, transport } = makeClient();
     await client.connect(transport);
