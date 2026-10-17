@@ -15,6 +15,7 @@ import {
 import { mergeStatements } from "@openuidev/react-lang";
 import {
   buildImageToolDescription,
+  buildMusicToolDescription,
   buildSpeechToolDescription,
   buildVideoToolDescription,
   defaultGenerationConfigPath,
@@ -306,6 +307,106 @@ function registerCreateSpeechTool(
             deep_link,
             model,
             ...(resolvedVoice !== undefined ? { voice: resolvedVoice } : {}),
+            job_id,
+          },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+}
+
+function registerCreateMusicTool(
+  server: McpServer,
+  store: ArtifactStore,
+  baseUrl: string,
+  mediaSizeCap: number,
+  liveBus: LiveBus | undefined,
+  generation: GenerationOptions
+) {
+  const whitelist = resolveWhitelist(generation);
+  const client = new OpenRouterClient({ apiKey: generation.apiKey, baseUrl: generation.baseUrl });
+  server.registerTool(
+    "create_music",
+    {
+      title: "Generate music",
+      description: buildMusicToolDescription(whitelist),
+      inputSchema: {
+        session_id: ID_SCHEMA.describe("Session id; agent-minted, unique per agent run"),
+        title: z.string().min(1).describe("Human-visible artifact title"),
+        prompt: z.string().min(1).describe("Text prompt describing the song to generate"),
+        model: z
+          .enum(modelIds(whitelist.music) as [string, ...string[]])
+          .describe("OpenRouter music model from the active whitelist"),
+        references: z
+          .array(REFERENCE_SCHEMA)
+          .max(MAX_REFERENCES)
+          .optional()
+          .describe(
+            "Optional reference images for conditioning — the model themes the song on the supplied picture; resolved to inline data URLs server-side"
+          ),
+        artifact_id: OPTIONAL_ID_SCHEMA,
+        session_title: SESSION_TITLE_SCHEMA,
+      },
+    },
+    async ({ session_id, title, prompt, model, references, artifact_id, session_title }) => {
+      try {
+        // Pre-flight: the whitelist is the curated cap source; a non-
+        // whitelisted model fails fast and legibly (spec #55 story 17).
+        const entry: WhitelistModelEntry | undefined = resolveWhitelist(generation).music.find(
+          (m) => m.id === model
+        );
+        if (!entry) return toolError(`model ${model} is not on the active whitelist`);
+        const generated = await client.generateMusic({
+          model,
+          prompt,
+          references: await resolveReferences(references as ReferenceInput[] | undefined, store, mediaSizeCap),
+        });
+        const result = await store.pushMedia({
+          session_id,
+          title,
+          type: "audio",
+          // The provider ignores requested formats; the store sniffs the
+          // mime from the decoded bytes (spec #55 decision 7).
+          source: { base64: generated.base64, mime: "audio/mpeg" },
+          artifact_id,
+          session_title,
+          transcript: generated.transcript,
+        });
+        liveBus?.broadcast(artifactEvent(result));
+        const { artifact, created } = result;
+        // Music jobs complete inline but are recorded in the registry so
+        // check_generation can look them up like any other generation job.
+        let job_id: string | undefined;
+        if (generation.jobRegistry) {
+          job_id = `music-${crypto.randomUUID()}`;
+          generation.jobRegistry.createJob({
+            job_id,
+            session_id,
+            target_artifact_id: artifact_id,
+            title,
+            model,
+            prompt,
+          });
+          generation.jobRegistry.updateJob(job_id, {
+            status: "completed",
+            usage_cost: generated.cost,
+            artifact_id: artifact.artifact_id,
+          });
+        }
+        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
+        const text = `${created ? "Generated" : "Replaced"} audio artifact ${artifact.artifact_id} in session ${session_id} with ${model}. Preview: ${deep_link}`;
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: {
+            session_id,
+            artifact_id: artifact.artifact_id,
+            created,
+            deep_link,
+            model,
+            cost: generated.cost,
+            transcript: generated.transcript,
             job_id,
           },
         };
@@ -825,6 +926,11 @@ export async function handleMcpRequest(
     // Speech needs at least one whitelisted speech model for a valid enum.
     if (modelIds(resolveWhitelist(generation).speech).length > 0) {
       registerCreateSpeechTool(server, store, baseUrl, mediaSizeCap, liveBus, generation);
+    }
+    // The music tool is synchronous; it only needs the whitelist to be
+    // non-empty so the model enum is valid.
+    if (modelIds(resolveWhitelist(generation).music).length > 0) {
+      registerCreateMusicTool(server, store, baseUrl, mediaSizeCap, liveBus, generation);
     }
     // The video tool needs the boot-owned poller service (submit-and-notify);
     // it also needs at least one whitelisted video model for a valid enum.

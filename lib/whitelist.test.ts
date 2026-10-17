@@ -8,6 +8,7 @@ import {
   modelIds,
   defaultModel,
   buildImageToolDescription,
+  buildMusicToolDescription,
   preflightParamError,
   buildSpeechToolDescription,
   speechCloningPreflightError,
@@ -54,6 +55,38 @@ describe("whitelist", () => {
     expect(offline).not.toContain("$");
     const online = buildImageToolDescription(wl, new Map([["google/gemini-2.5-flash-image", { priceHint: "$0.03/image" }]]));
     expect(online).toContain("$0.03/image");
+  });
+
+  it("music whitelist defaults to the lyria models", () => {
+    const wl = loadWhitelist(join(tmpdir(), `no-such-config-${Date.now()}.json`));
+    expect(modelIds(wl.music)).toEqual([
+      "google/lyria-3-clip-preview",
+      "google/lyria-3-pro-preview",
+    ]);
+    expect(defaultModel(wl.music)).toBe("google/lyria-3-clip-preview");
+  });
+
+  it("music override leaves other modalities at defaults (per-modality config)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "aurora-wl-"));
+    const path = join(dir, "generation.json");
+    writeFileSync(path, JSON.stringify({ music: [{ id: "custom/song", default: true }] }));
+    try {
+      const wl = loadWhitelist(path);
+      expect(modelIds(wl.music)).toEqual(["custom/song"]);
+      // Image and video were not overridden in this config.
+      expect(modelIds(wl.image)).toEqual(modelIds(DEFAULT_WHITELIST.image));
+      expect(modelIds(wl.video)).toEqual(modelIds(DEFAULT_WHITELIST.video));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("music description embeds the static per-song prices", () => {
+    const wl = loadWhitelist(join(tmpdir(), `no-such-config-${Date.now()}.json`));
+    const description = buildMusicToolDescription(wl);
+    expect(description).toContain("$0.04/clip");
+    expect(description).toContain("$0.08/song");
+    expect(description).toContain("transcript");
   });
 
   it("pre-flight rejects params outside the model's capabilities", () => {
