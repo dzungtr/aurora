@@ -78,3 +78,19 @@ _Avoid_: task, request
 **Whitelist**:
 The operator-curated allowlist of provider models exposed to agents as the generation tools' model enum.
 _Avoid_: catalog, allowlist, model list
+
+**Speech**:
+Generated spoken audio from text, via the dedicated `/audio/speech` endpoint; priced per input character. Contrast with Music.
+_Avoid_: TTS, voiceover, narration
+
+**Music**:
+Generated song audio (lyrics + composition) via chat-completions audio modality; priced per song or per clip. Contrast with Speech.
+_Avoid_: song generation, lyrics, composition
+
+**Voice cloning**:
+Conditioning speech generation on reference audio clips so the output mimics the source voice; clips are resolved to inline data URLs from artifact/path/base64/url references.
+_Avoid_: voice copy, cloning, voice transfer
+
+**Transcript**:
+Text metadata on a media artifact — for music, the model's song structure (lyrics, timestamps, sections); for cloned speech, the reference clip's text.
+_Avoid_: lyrics field, caption, subtitle
