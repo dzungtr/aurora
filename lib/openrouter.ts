@@ -39,8 +39,9 @@ export interface SpeechGenerationParams {
   response_format: "mp3" | "wav";
   /** Inline data URLs for voice-cloning reference clips */
   references?: string[];
-  /** Per-clip transcripts, paired with `references` for input_audio parts */
-  referenceTranscripts?: string[];
+  /** Per-clip transcripts, paired with `references` for input_audio parts.
+   * Positions may be undefined so transcripts stay aligned with references. */
+  referenceTranscripts?: (string | undefined)[];
 }
 
 export interface SpeechGenerationResult {
