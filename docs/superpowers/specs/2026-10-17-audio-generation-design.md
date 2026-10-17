@@ -95,8 +95,21 @@ Exact mirror of `push_image`/`push_video`: `session_id`, `title`, `source`
 5. **lib/audioMime.ts** (new) — byte sniffer + fallback combiner.
 6. **mcpSurface.ts** — register `push_audio`, `create_speech`, `create_music` (inside
    the `generation?.apiKey` gate); voice prefill; cloning preflight.
-7. **AudioViewer.tsx** — render `transcript` (expandable lyrics block) when present.
-8. **README.md** — tool list updated.
+7. **src/preview/MediaArtifact.tsx** — route audio artifacts to an `<audio
+   controls>` player (video → `<video>`, audio → `<audio>`, else `<img>` today);
+   render the artifact `transcript` (expandable lyrics block) when present.
+8. **src/preview/StackView.tsx** — include `audio` in the media routing branch.
+9. **src/preview/previewApi.ts** — `ArtifactMeta` gains optional `transcript`.
+10. **README.md** — tool list updated.
+
+Note: `src/components/viewers/AudioViewer.tsx` is the file-explorer viewer
+(path-based); it needs no change for this feature. The preview surface is the
+rendering path for pushed/generated audio. (Amendment 2026-10-17: preview
+surface files added to the edit scope after worker exploration surfaced the
+routing gap.)
+
+Completed audio generation jobs are recorded in the job registry inline, the
+same way `create_image` does, so `check_generation` looks them up uniformly.
 
 ## Tests
 
