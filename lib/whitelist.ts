@@ -30,6 +30,8 @@ export interface GenerationWhitelist {
   image: WhitelistModelEntry[];
   video: WhitelistModelEntry[];
   speech: WhitelistModelEntry[];
+  /** Music models (chat-completions audio modality, spec #55) */
+  music: WhitelistModelEntry[];
   /**
    * Optional base URL (e.g. a remote ingress) used for preview deep links
    * returned by MCP tools. When absent, the request's own Host / forwarded
@@ -69,6 +71,17 @@ export const DEFAULT_WHITELIST: GenerationWhitelist = {
       note: "voice-cloning text-to-speech",
       default_voice: "Rachel",
       supports_voice_cloning: true,
+    },
+  ],
+  music: [
+    {
+      id: "google/lyria-3-clip-preview",
+      note: "$0.04/clip (30s)",
+      default: true,
+    },
+    {
+      id: "google/lyria-3-pro-preview",
+      note: "$0.08/song",
     },
   ],
   video: [
@@ -124,8 +137,8 @@ export function loadWhitelist(configPath: string = defaultGenerationConfigPath()
   }
   try {
     const parsed = JSON.parse(raw) as Partial<GenerationWhitelist>;
-    const out: GenerationWhitelist = { image: [], video: [], speech: [] };
-    for (const modality of ["image", "video", "speech"] as const) {
+    const out: GenerationWhitelist = { image: [], video: [], speech: [], music: [] };
+    for (const modality of ["image", "video", "speech", "music"] as const) {
       const list = parsed[modality];
       if (Array.isArray(list)) {
         for (const entry of list) {
@@ -249,6 +262,26 @@ export function speechCloningPreflightError(entry: WhitelistModelEntry, hasRefer
     );
   }
   return null;
+}
+
+/**
+ * Build the create_music tool description with the per-song price hints
+ * (spec #55 decision 9): the whitelist entries carry static per-song prices,
+ * so the description is built from the whitelist alone.
+ */
+export function buildMusicToolDescription(whitelist: GenerationWhitelist): string {
+  const hints = whitelist.music
+    .map((m) => `${m.id}${formatPriceHint(m, new Map())}${m.default ? " [default]" : ""}`)
+    .join("; ");
+  return (
+    "Generate one song from a text prompt, optionally conditioned on reference " +
+    "images, via OpenRouter's chat-completions audio modality; snapshots an " +
+    "aurora audio artifact with the song's lyrics/structure stored as " +
+    "transcript metadata. Synchronous. Per-song prices at build of this " +
+    "description: " +
+    hints +
+    "."
+  );
 }
 
 /** Video generation params subject to pre-flight validation. */

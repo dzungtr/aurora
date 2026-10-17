@@ -51,6 +51,22 @@ export interface SpeechGenerationResult {
   generationId?: string;
 }
 
+export interface MusicGenerationParams {
+  model: string;
+  prompt: string;
+  /** Inline data URLs for image-conditioning reference images */
+  references?: string[];
+}
+
+export interface MusicGenerationResult {
+  /** Concatenated base64 audio bytes (declared mime may be wrong; sniff at push) */
+  base64: string;
+  /** Song structure text collected from delta.content (lyrics, timestamps, sections) */
+  transcript?: string;
+  /** Actual generation cost in USD as reported by OpenRouter usage */
+  cost?: number;
+}
+
 export interface ModelCatalogEntry {
   id: string;
   pricing?: {
@@ -170,6 +186,90 @@ export class OpenRouterClient {
       bytes: new Uint8Array(await res.arrayBuffer()),
       mime: res.headers.get("content-type")?.split(";")[0] || "audio/mpeg",
       generationId: res.headers.get("x-request-id") ?? undefined,
+    };
+  }
+
+  /**
+   * Generate one song via the chat-completions audio modality (spec #55).
+   * The response streams as SSE: delta.content carries the song structure
+   * (collected as the transcript), delta.audio.data carries base64 audio
+   * chunks that concatenate into the audio bytes, and the final chunk's
+   * usage.cost is the actual generation cost. The provider ignores requested
+   * formats — the mime is sniffed from the decoded bytes at push time.
+   */
+  async generateMusic(params: MusicGenerationParams): Promise<MusicGenerationResult> {
+    const res = await fetch(`${this.config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        model: params.model,
+        // With image-conditioning references the message becomes multimodal:
+        // text part plus one image_url part per reference, same input shape
+        // as image generation.
+        messages: [
+          {
+            role: "user",
+            content:
+              params.references && params.references.length > 0
+                ? [
+                    { type: "text", text: params.prompt },
+                    ...params.references.map((url) => ({ type: "image_url", image_url: { url } })),
+                  ]
+                : params.prompt,
+          },
+        ],
+        modalities: ["text", "audio"],
+        stream: true,
+        usage: { include: true },
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`OpenRouter music generation failed (${res.status}): ${body.slice(0, 500)}`);
+    }
+    const transcriptParts: string[] = [];
+    const audioChunks: string[] = [];
+    let cost: number | undefined;
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const handleLine = (raw: string) => {
+      const line = raw.trim();
+      if (!line.startsWith("data:")) return;
+      const payload = line.slice(5).trim();
+      if (payload === "[DONE]") return;
+      let chunk: any;
+      try {
+        chunk = JSON.parse(payload);
+      } catch {
+        return; // keep-alive comments and malformed lines are skipped
+      }
+      const delta = chunk?.choices?.[0]?.delta;
+      if (typeof delta?.content === "string") transcriptParts.push(delta.content);
+      if (typeof delta?.audio?.data === "string") audioChunks.push(delta.audio.data);
+      if (typeof chunk?.usage?.cost === "number") cost = chunk.usage.cost;
+    };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf("\n")) !== -1) {
+        handleLine(buffer.slice(0, idx));
+        buffer = buffer.slice(idx + 1);
+      }
+    }
+    if (buffer.trim().length > 0) handleLine(buffer);
+    if (audioChunks.length === 0) {
+      throw new Error("OpenRouter returned no audio payload");
+    }
+    // Each SSE audio event is an independently base64-encoded segment;
+    // decode per chunk and concatenate the bytes.
+    const bytes = Buffer.concat(audioChunks.map((c) => Buffer.from(c, "base64")));
+    return {
+      base64: bytes.toString("base64"),
+      transcript: transcriptParts.length > 0 ? transcriptParts.join("") : undefined,
+      cost,
     };
   }
 
