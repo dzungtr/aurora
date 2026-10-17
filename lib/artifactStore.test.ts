@@ -338,6 +338,44 @@ describe("ArtifactStore.pushMedia", () => {
     expect((await store.listArtifacts("s")).length).toBe(1);
   });
 
+  it("accepts type audio, sniffing mime from bytes over the declared mime", async () => {
+    // ID3 header with a lying declared mime: bytes win.
+    const mp3 = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00]);
+    const { artifact } = await store.pushMedia({
+      session_id: "s",
+      title: "Narration",
+      type: "audio",
+      source: { base64: mp3.toString("base64"), mime: "application/octet-stream" },
+    });
+    expect(artifact.type).toBe("audio");
+    expect(artifact.mime).toBe("audio/mpeg");
+    expect(artifact.size).toBe(mp3.byteLength);
+  });
+
+  it("falls back to the declared mime when audio bytes do not match a signature", async () => {
+    const { artifact } = await store.pushMedia({
+      session_id: "s",
+      title: "Narration",
+      type: "audio",
+      source: { base64: Buffer.from([1, 2, 3]).toString("base64"), mime: "audio/x-custom" },
+    });
+    expect(artifact.mime).toBe("audio/x-custom");
+  });
+
+  it("persists an optional transcript in the artifact metadata", async () => {
+    const mp3 = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00]);
+    const { artifact } = await store.pushMedia({
+      session_id: "s",
+      title: "Song",
+      type: "audio",
+      source: { base64: mp3.toString("base64"), mime: "audio/mpeg" },
+      transcript: "Verse 1: hello world",
+    });
+    expect(artifact.transcript).toBe("Verse 1: hello world");
+    const stored = await store.getArtifactMeta("s", artifact.artifact_id);
+    expect(stored?.transcript).toBe("Verse 1: hello world");
+  });
+
   it("keeps sessions isolated", async () => {
     await store.pushMedia({
       session_id: "s1",

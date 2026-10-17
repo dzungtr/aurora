@@ -499,8 +499,8 @@ function registerPushUiTool(
 
 function registerMediaTool(
   server: McpServer,
-  name: "push_image" | "push_video",
-  artifactType: "image" | "video",
+  name: "push_image" | "push_video" | "push_audio",
+  artifactType: "image" | "video" | "audio",
   store: ArtifactStore,
   baseUrl: string,
   mediaSizeCap: number,
@@ -519,11 +519,16 @@ function registerMediaTool(
         session_id: ID_SCHEMA.describe("Session id; agent-minted, unique per agent run"),
         title: z.string().min(1).describe("Human-visible artifact title"),
         source: MEDIA_SOURCE_SCHEMA,
+        // Audio carries an optional transcript (lyrics, narration text)
+        // persisted with the artifact metadata (spec #55 decision 10).
+        ...(artifactType === "audio"
+          ? { transcript: z.string().optional().describe("Optional transcript (lyrics, narration text) shown with the audio player") }
+          : {}),
         artifact_id: OPTIONAL_ID_SCHEMA,
         session_title: SESSION_TITLE_SCHEMA,
       },
     },
-    async ({ session_id, title, source, artifact_id, session_title }) => {
+    async ({ session_id, title, source, artifact_id, session_title, transcript }) => {
       try {
         const result = await store.pushMedia({
           session_id,
@@ -533,6 +538,7 @@ function registerMediaTool(
           artifact_id,
           session_title,
           size_cap: mediaSizeCap,
+          transcript,
         });
         // Thin live-update event: clients refetch content over HTTP.
         liveBus?.broadcast(artifactEvent(result));
@@ -546,6 +552,8 @@ function registerMediaTool(
             artifact_id: artifact.artifact_id,
             created,
             deep_link,
+            // Audio push results echo the transcript (spec #55 decision 10).
+            ...(artifact.transcript !== undefined ? { transcript: artifact.transcript } : {}),
           },
         };
       } catch (err) {
@@ -654,6 +662,7 @@ export async function handleMcpRequest(
 
   registerMediaTool(server, "push_image", "image", store, baseUrl, mediaSizeCap, liveBus);
   registerMediaTool(server, "push_video", "video", store, baseUrl, mediaSizeCap, liveBus);
+  registerMediaTool(server, "push_audio", "audio", store, baseUrl, mediaSizeCap, liveBus);
 
   // Generation tools are registered only when an OpenRouter API key is
   // configured (env var read once at server start, or injected via options).

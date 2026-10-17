@@ -20,6 +20,8 @@ export interface ArtifactMeta {
   title: string;
   created_at: string;
   updated_at: string;
+  /** audio artifacts: optional transcript (lyrics, narration text) */
+  transcript?: string;
 }
 
 export interface Artifact extends ArtifactMeta {

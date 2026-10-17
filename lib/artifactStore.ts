@@ -3,6 +3,7 @@ import type { ChartData, ChartType } from "./chartContract";
 import { writeFileSync, renameSync } from "node:fs";
 import { join, isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
+import { sniffAudioMime } from "./audioMime";
 
 /** Fails a push when base64/url media exceeds the shared size cap. */
 export class MediaSizeCapError extends Error {
@@ -59,17 +60,21 @@ export interface ArtifactMeta {
   mime?: string;
   /** media artifacts: snapshot byte size */
   size?: number;
+  /** audio artifacts: optional transcript (lyrics, narration text) */
+  transcript?: string;
 }
 
 export interface PushMediaInput {
   session_id: string;
   title: string;
-  /** "image" or "video" — determines the tool and the UI renderer */
-  type: "image" | "video";
+  /** "image", "video", or "audio" — determines the tool and the UI renderer */
+  type: "image" | "video" | "audio";
   source: MediaSource;
   artifact_id?: string;
   session_title?: string;
   size_cap?: number;
+  /** audio: optional transcript persisted with the artifact metadata */
+  transcript?: string;
 }
 
 export interface PushMarkdownInput {
@@ -243,7 +248,11 @@ export class ArtifactStore {
     if (input.artifact_id !== undefined) validateId(input.artifact_id);
 
     const cap = input.size_cap ?? DEFAULT_MEDIA_SIZE_CAP;
-    const { bytes, mime } = await snapshotMedia(input.source, cap);
+    let { bytes, mime } = await snapshotMedia(input.source, cap);
+    // Audio mimes are sniffed from bytes first (providers ignore requested
+    // formats, pushed files carry agent-declared mimes); sniff-miss falls
+    // back to the declared mime without error.
+    if (input.type === "audio") mime = sniffAudioMime(bytes, mime);
 
     const now = new Date().toISOString();
     const session = await this.ensureSession(input.session_id, input.session_title, now);
@@ -267,6 +276,7 @@ export class ArtifactStore {
       updated_at: now,
       mime,
       size: bytes.byteLength,
+      ...(input.transcript !== undefined ? { transcript: input.transcript } : {}),
     };
 
     await mkdir(dir, { recursive: true });

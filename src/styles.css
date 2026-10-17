@@ -694,3 +694,10 @@
 }
 .aur-ui__errorhead { color: var(--negative); font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 .aur-ui__errorline { color: var(--text); font-size: 12px; font-family: ui-monospace, monospace; line-height: 1.5; }
+
+/* Audio media artifacts (issue #56): stacked player + transcript block */
+.aur-media--audio { flex-direction: column; gap: 12px; }
+.aur-media__audio { width: min(560px, 100%); }
+.aur-media__transcript { width: min(560px, 100%); font-size: 13px; color: var(--t2); }
+.aur-media__transcript summary { cursor: pointer; }
+.aur-media__transcript pre { white-space: pre-wrap; margin: 8px 0 0; font-family: inherit; }
