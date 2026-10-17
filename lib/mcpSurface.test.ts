@@ -395,11 +395,11 @@ if failures:
 describe("push_image / push_video", () => {
   const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]).toString("base64");
 
-  it("lists both media tools", async () => {
+  it("lists all three media tools including push_audio", async () => {
     const { client, transport } = makeClient();
     await client.connect(transport);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(["push_image", "push_video"]));
+    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(["push_image", "push_video", "push_audio"]));
     await client.close();
   });
 
@@ -445,6 +445,32 @@ describe("push_image / push_video", () => {
     expect(range.status).toBe(206);
     expect(range.headers.get("content-range")).toBe("bytes 0-3/10");
     expect(await range.text()).toBe("0123");
+  });
+
+  it("pushes audio end-to-end: sniffed mime, transcript persisted and returned", async () => {
+    const { client, transport } = makeClient();
+    await client.connect(transport);
+    // ID3 header with a lying declared mime: bytes win.
+    const mp3 = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00]).toString("base64");
+    const res = await client.callTool({
+      name: "push_audio",
+      arguments: {
+        session_id: "audio",
+        title: "Narration",
+        source: { base64: mp3, mime: "application/octet-stream" },
+        transcript: "Verse 1: hello world",
+      },
+    });
+    const sc = res.structuredContent as any;
+    expect(res.isError).toBeFalsy();
+    expect(sc.deep_link).toBe(`${BASE}/preview/audio`);
+    expect(sc.transcript).toBe("Verse 1: hello world");
+    const blobRes = await fetch(`${BASE}/api/preview/sessions/audio/artifacts/${sc.artifact_id}/blob`);
+    expect(blobRes.status).toBe(200);
+    expect(blobRes.headers.get("content-type")).toBe("audio/mpeg");
+    const list = await (await fetch(`${BASE}/api/preview/sessions/audio/artifacts`)).json();
+    expect(list[0].transcript).toBe("Verse 1: hello world");
+    await client.close();
   });
 
   it("rejects oversized media with an actionable isError result", async () => {

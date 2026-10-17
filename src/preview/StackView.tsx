@@ -41,6 +41,7 @@ const TYPE_META: Record<string, { label: string; icon: string; dark: string; lig
   ui: { label: "UI", icon: "uil:apps", dark: "#81c784", light: "#2e7d32" },
   image: { label: "Image", icon: "uil:image", dark: "#ffb74d", light: "#ef6c00" },
   video: { label: "Video", icon: "uil:video", dark: "#f06292", light: "#c2185b" },
+  audio: { label: "Audio", icon: "uil:music", dark: "#66bb6a", light: "#2e7d32" },
 };
 
 function typeMeta(type: string, theme: Theme) {
@@ -346,13 +347,13 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
                       push_ui · composed with the aurora component library
                     </div>
                   </div>
-                ) : current.type === "image" || current.type === "video" ? (
+                ) : current.type === "image" || current.type === "video" || current.type === "audio" ? (
                   <div className="aur-stack3__pane-card">
                     <div className={"aur-stack3__cardbox" + (current.type === "video" ? " aur-stack3__cardbox--video" : "")}>
                       <MediaArtifact artifact={current} />
                     </div>
                     <div className="aur-stack3__caption aur-stack3__captionmono">
-                      {current.type === "image" ? "push_image" : "push_video"}
+                      {current.type === "image" ? "push_image" : current.type === "video" ? "push_video" : "push_audio"}
                     </div>
                   </div>
                 ) : null}

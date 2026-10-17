@@ -10,7 +10,7 @@ import { onArtifactEvent } from "./liveSocket";
 import { Icon } from "../components/Icon";
 import { PreviewTopBar } from "./PreviewTopBar";
 
-const TOOLS = ["push_markdown", "push_mermaid", "push_image", "push_video", "push_chart"];
+const TOOLS = ["push_markdown", "push_mermaid", "push_image", "push_video", "push_audio", "push_chart"];
 
 function fmtActivity(iso: string): string {
   const t = new Date(iso).getTime();
