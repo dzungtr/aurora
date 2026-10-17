@@ -19,7 +19,12 @@ export interface ReferenceInput {
   mime?: string;
   /** Remote URL, fetched server-side */
   url?: string;
+  /** Speech voice-cloning clips: optional transcript forwarded alongside the clip */
+  transcript?: string;
 }
+
+/** Reference modality (spec #55): speech accepts audio clips, image stays image. */
+export type ReferenceModality = "image" | "speech";
 
 /** A reference resolved to the shape the provider APIs accept. */
 export interface ResolvedReference {
@@ -56,7 +61,8 @@ function enforceCap(bytes: Uint8Array, cap: number): void {
 export async function resolveReference(
   ref: ReferenceInput,
   store: ArtifactStore,
-  cap: number = DEFAULT_MEDIA_SIZE_CAP
+  cap: number = DEFAULT_MEDIA_SIZE_CAP,
+  modality: ReferenceModality = "image"
 ): Promise<ResolvedReference> {
   const variants = [
     ref.artifact !== undefined && "artifact",
@@ -76,9 +82,11 @@ export async function resolveReference(
     if (!meta) {
       throw new ReferenceError(`Referenced artifact not found: ${artifact_id} in session ${session_id}`);
     }
-    if (meta.type !== "image") {
+    const expectedType = modality === "speech" ? "audio" : "image";
+    if (meta.type !== expectedType) {
+      const accepted = expectedType;
       throw new ReferenceError(
-        `Referenced artifact ${artifact_id} is a ${meta.type} artifact, not an image — provider generation APIs accept image references only. Reference an image artifact (e.g. one produced by create_image) instead.`
+        `Referenced artifact ${artifact_id} is a ${meta.type} artifact, not ${modality === "image" ? "an image" : "an audio clip"} — provider ${modality} generation APIs accept ${accepted} references only. Reference an ${accepted} artifact (e.g. one produced by ${modality === "image" ? "create_image" : "push_audio"}) instead.`
       );
     }
     const blobPath = await store.blobPath(session_id, artifact_id);

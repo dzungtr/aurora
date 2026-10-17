@@ -9,6 +9,8 @@ import {
   defaultModel,
   buildImageToolDescription,
   preflightParamError,
+  buildSpeechToolDescription,
+  speechCloningPreflightError,
 } from "./whitelist";
 
 describe("whitelist", () => {
@@ -60,5 +62,68 @@ describe("whitelist", () => {
     expect(preflightParamError(entry, "aspect_ratios", "16:9")).toBeNull();
     // No capability data → pass through to the provider
     expect(preflightParamError({ id: "m" }, "aspect_ratios", "21:9")).toBeNull();
+  });
+});
+
+describe("speech whitelist (issue #57)", () => {
+  it("ships three speech defaults with default_voice and cloning flags", () => {
+    expect(modelIds(DEFAULT_WHITELIST.speech)).toEqual([
+      "hexgrad/kokoro-82m",
+      "google/gemini-3.8-flash-tts",
+      "elevenlabs/eleven-v4",
+    ]);
+    expect(defaultModel(DEFAULT_WHITELIST.speech)).toBe("hexgrad/kokoro-82m");
+    const kokoro = DEFAULT_WHITELIST.speech[0];
+    expect(kokoro.default_voice).toBe("af_heart");
+    expect(kokoro.supports_voice_cloning).toBeUndefined();
+    expect(DEFAULT_WHITELIST.speech[2].supports_voice_cloning).toBe(true);
+  });
+
+  it("normalizes default_voice and supports_voice_cloning from a config override", () => {
+    const dir = mkdtempSync(join(tmpdir(), "aurora-speech-wl-"));
+    const path = join(dir, "generation.json");
+    writeFileSync(path, JSON.stringify({
+      speech: [
+        { id: "custom/tts", default: true, default_voice: "nx_alloy", supports_voice_cloning: false },
+        { id: "clone/tts", supports_voice_cloning: true },
+      ],
+    }));
+    try {
+      const wl = loadWhitelist(path);
+      expect(modelIds(wl.speech)).toEqual(["custom/tts", "clone/tts"]);
+      expect(wl.speech[0].default_voice).toBe("nx_alloy");
+      expect(wl.speech[0].supports_voice_cloning).toBe(false);
+      expect(wl.speech[1].supports_voice_cloning).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("overrides speech per-modality while image/video keep their defaults", () => {
+    const dir = mkdtempSync(join(tmpdir(), "aurora-speech-wl-"));
+    const path = join(dir, "generation.json");
+    writeFileSync(path, JSON.stringify({ speech: [{ id: "only/tts", default: true }] }));
+    try {
+      const wl = loadWhitelist(path);
+      expect(modelIds(wl.speech)).toEqual(["only/tts"]);
+      expect(defaultModel(wl.image)).toBe("google/gemini-2.5-flash-image");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("speech tool description carries the per-character price note and cloning flags", () => {
+    const desc = buildSpeechToolDescription(DEFAULT_WHITELIST);
+    expect(desc).toContain("Priced per input character");
+    expect(desc).toContain("elevenlabs/eleven-v4");
+    expect(desc).toContain("[voice cloning]");
+  });
+
+  it("cloning preflight fails only when references are present on a non-cloning model", () => {
+    const nonCloning: any = { id: "m" };
+    expect(speechCloningPreflightError(nonCloning, false)).toBeNull();
+    expect(speechCloningPreflightError(nonCloning, true)).toContain("voice cloning");
+    expect(speechCloningPreflightError(nonCloning, true)).toContain("m");
+    expect(speechCloningPreflightError({ id: "c", supports_voice_cloning: true } as any, true)).toBeNull();
   });
 });
