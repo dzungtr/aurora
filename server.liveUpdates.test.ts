@@ -18,19 +18,16 @@ const PORT = 5072;
 delete process.env.OPENROUTER_API_KEY;
 const BASE = `http://127.0.0.1:${PORT}`;
 
-let root: string;
 let artifactsDir: string;
 let server: ReturnType<typeof createServer>;
 
 beforeAll(async () => {
-  root = mkdtempSync(join(tmpdir(), "aurora-ws-root-"));
   artifactsDir = mkdtempSync(join(tmpdir(), "aurora-ws-artifacts-"));
-  server = createServer(root, PORT, { artifactsDir });
+  server = createServer(PORT, { artifactsDir });
 });
 
 afterAll(() => {
   server?.stop(true);
-  rmSync(root, { recursive: true, force: true });
   rmSync(artifactsDir, { recursive: true, force: true });
 });
 

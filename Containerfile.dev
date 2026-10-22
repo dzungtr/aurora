@@ -24,7 +24,7 @@
 # Then inside the sandbox (repo mounted at /workspace or /sandbox):
 #   bun install --frozen-lockfile
 #   bun test
-#   bun --hot cli.ts . --port 7634    # bind 127.0.0.1 by default; use
+#   bun --hot cli.ts --port 7634       # bind 127.0.0.1 by default; use
 #                                     # AURORA_HOST=0.0.0.0 to expose via publish
 
 ARG BASE=ghcr.io/dzungtr/pi-openshell:openrouter

@@ -144,7 +144,7 @@ async function startServer(): Promise<TestServer> {
     dbPath,
     pollIntervalMs: 60_000,
   };
-  const server = createServer(root, port, { artifactsDir, generation });
+  const server = createServer(port, { artifactsDir, generation });
   // Give the fire-and-forget startup catalog fetches a moment to land.
   await Bun.sleep(150);
   return { server, generation, registry: new JobRegistry(dbPath), port };
@@ -362,7 +362,7 @@ Draft202012Validator.check_schema(schema)
       dbPath,
       pollIntervalMs: 25,
     };
-    const server = createServer(root, port, { artifactsDir, generation });
+    const server = createServer(port, { artifactsDir, generation });
     await Bun.sleep(150);
     const ts: TestServer = { server, generation, registry: new JobRegistry(dbPath), port };
     const { jobId, client } = await submitVideo(ts, "cg-race", "Race clip");

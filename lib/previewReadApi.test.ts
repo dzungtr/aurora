@@ -18,7 +18,7 @@ const base = `http://127.0.0.1:${PORT}`;
 
 const root = mkdtempSync(join(tmpdir(), "aurora-read-api-"));
 const artifactsDir = mkdtempSync(join(tmpdir(), "aurora-read-api-artifacts-"));
-const server = createServer(root, PORT, { artifactsDir });
+const server = createServer(PORT, { artifactsDir });
 
 afterAll(() => {
   server.stop(true);

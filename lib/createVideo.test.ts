@@ -152,7 +152,7 @@ async function startServer(opts: { pollIntervalMs?: number; jobCeilingMs?: numbe
     pollIntervalMs: opts.pollIntervalMs,
     jobCeilingMs: opts.jobCeilingMs,
   };
-  const server = createServer(root, port, { artifactsDir, generation });
+  const server = createServer(port, { artifactsDir, generation });
   // Give the fire-and-forget startup catalog fetches a moment to land.
   await Bun.sleep(150);
   // The fresh-HOME test leaves usedDb undefined; that test never touches the
@@ -455,7 +455,7 @@ Draft202012Validator.check_schema(schema)
   it("create_video is not registered when no key is configured", async () => {
     const port = 5094;
     const artifacts2 = join(tmpdir(), `aurora-video-artifacts2-${Date.now()}`);
-    const s = createServer(root, port, { artifactsDir: artifacts2 });
+    const s = createServer(port, { artifactsDir: artifacts2 });
     try {
       const { client, transport } = makeClient(port);
       await client.connect(transport);
@@ -496,7 +496,7 @@ Draft202012Validator.check_schema(schema)
         pollIntervalMs: 25,
         jobCeilingMs: 150,
       };
-      createServer(process.env.ROOT_DIR!, Number(process.env.PORT!), { generation, artifactsDir: process.env.ARTIFACTS_DIR });
+      createServer(Number(process.env.PORT!), { generation, artifactsDir: process.env.ARTIFACTS_DIR });
     `;
     const child = Bun.spawn(["bun", "-e", bootScript], {
       env: {
@@ -504,7 +504,6 @@ Draft202012Validator.check_schema(schema)
         HOME: freshHome,
         AURORA_ROOT: import.meta.dir + "/..",
         PORT: String(port),
-        ROOT_DIR: root,
         ARTIFACTS_DIR: artifacts,
         WHITELIST_PATH: configPath,
       },

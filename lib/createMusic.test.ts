@@ -135,7 +135,7 @@ beforeAll(async () => {
     dbPath,
     pollIntervalMs: 60_000,
   };
-  server = createServer(root, PORT, { artifactsDir, generation });
+  server = createServer(PORT, { artifactsDir, generation });
   // Give the fire-and-forget startup catalog fetch a moment to land.
   await Bun.sleep(150);
 });

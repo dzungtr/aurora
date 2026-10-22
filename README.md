@@ -1,13 +1,13 @@
 # aurora
 
-A local-first file explorer and MCP artifact-preview host for agents. aurora serves a project directory over a web UI (file tree, markdown, mermaid, ECharts, images, video, PDFs) and exposes an MCP server over Streamable HTTP so coding agents can push artifacts (markdown, charts, mermaid diagrams, images, videos) into an always-visible preview window.
+A local-first MCP artifact-preview host for agents. aurora exposes an MCP server over Streamable HTTP so coding agents can push artifacts (markdown, charts, mermaid diagrams, images, videos) into an always-visible preview window. There is no file explorer — aurora serves its artifact store and nothing else (see [ADR 0007](docs/adr/0007-explorer-decommissioned-artifact-only-host.md)).
 
 ## Quick start
 
 ```sh
 bun install
-bun cli.ts .            # serve the current directory on port 7634
-bun cli.ts /path/to/project --port 8080
+bun cli.ts              # serve on port 7634
+bun cli.ts --port 8080
 ```
 
 Run tests: `bun test`
@@ -16,9 +16,8 @@ Run tests: `bun test`
 
 ```sh
 docker run -p 127.0.0.1:7634:7634 ghcr.io/dzungtr/aurora
-# serve a host directory + persist artifacts:
+# persist artifacts across container restarts:
 docker run -p 127.0.0.1:7634:7634 \
-  -v "$PWD:/workspace" \
   -v aurora-artifacts:/root/.local/share/aurora/artifacts \
   ghcr.io/dzungtr/aurora
 ```
@@ -27,14 +26,14 @@ The container publishes on `127.0.0.1` only — aurora's "localhost is the secur
 
 ## Adding aurora as an MCP server
 
-Aurora exposes MCP over **Streamable HTTP** at a fixed localhost URL (default `http://127.0.0.1:7634/mcp`). One running aurora instance serves all agents on the machine — install the URL once, per agent config. Artifacts are stored machine-globally (default `~/.local/share/aurora/artifacts`), independent of which directory the explorer is browsing.
+Aurora exposes MCP over **Streamable HTTP** at a fixed localhost URL (default `http://127.0.0.1:7634/mcp`). One running aurora instance serves all agents on the machine — install the URL once, per agent config. Artifacts are stored machine-globally (default `~/.local/share/aurora/artifacts`), the only state aurora keeps.
 
 > **Security:** aurora has no authentication — the localhost bind *is* the security boundary. Never expose port 7634 to the network.
 
 1. Start aurora and leave it running:
 
    ```sh
-   bun cli.ts .
+   bun cli.ts
    ```
 
 2. Point your agent at the endpoint. Examples:
@@ -88,7 +87,6 @@ All artifacts are **immutable snapshots** copied into `~/.local/share/aurora/art
 
 | Env / arg | Default | Notes |
 | --- | --- | --- |
-| positional `<path>` | (required) | Root directory to explore |
 | `--port` | `7634` | HTTP + MCP port |
 | `AURORA_HOST` | `127.0.0.1` | Bind address (container images set `0.0.0.0`) |
 
@@ -96,6 +94,6 @@ Preview deep links returned by MCP tools use, in order of precedence: `publicUrl
 
 ## Docs
 
-- [ADR 0001 — MCP over Streamable HTTP, single instance](docs/adr/0001-single-instance-streamable-http-mcp.md)
+- [ADR 0007 — Explorer decommissioned, artifact-only host](docs/adr/0007-explorer-decommissioned-artifact-only-host.md)
 - [ADR 0002 — Immutable artifact snapshots](docs/adr/0002-immutable-snapshot-artifact-store.md)
 - [ADR 0003 — Typed artifact contracts](docs/adr/0003-typed-artifact-contracts.md)
