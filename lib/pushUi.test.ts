@@ -78,7 +78,7 @@ describe("push_ui", () => {
     const sc = res.structuredContent as any;
     expect(sc.created).toBe(true);
     expect(sc.artifact_id).toMatch(/^[\w.-]+$/);
-    expect(sc.deep_link).toBe(`${BASE}/preview/ui-agent`);
+    expect(sc.deep_link).toBe(`${BASE}/s/ui-agent`);
     // The program source itself is stored (ADR 0002), as a ui-type artifact.
     const fetched = await (
       await fetch(`${BASE}/api/preview/sessions/ui-agent/artifacts/${sc.artifact_id}`)

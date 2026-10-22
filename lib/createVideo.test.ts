@@ -355,7 +355,7 @@ Draft202012Validator.check_schema(schema)
     const structured = submit.structuredContent as any;
     // Immediate response: job id + deep link + model + price hint.
     expect(structured.job_id).toBeDefined();
-    expect(structured.deep_link).toBe(`http://127.0.0.1:${ts.port}/preview/v-agent`);
+    expect(structured.deep_link).toBe(`http://127.0.0.1:${ts.port}/s/v-agent`);
     expect(structured.model).toBe("fake/video-model");
     expect(structured.price_hint).toBe("$0.05/s");
     // Registry row is pending at response time.

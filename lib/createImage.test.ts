@@ -166,7 +166,7 @@ Draft202012Validator.check_schema(schema)
     expect(structured.model).toBe("cheap/model");
     expect(structured.cost).toBe(0.042);
     expect(structured.artifact_id).toBeDefined();
-    expect(structured.deep_link).toBe(`${BASE}/preview/gen-agent`);
+    expect(structured.deep_link).toBe(`${BASE}/s/gen-agent`);
     expect(structured.created).toBe(true);
 
     // Auth header asserted: the fake server saw the bearer key

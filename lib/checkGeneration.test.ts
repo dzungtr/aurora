@@ -270,7 +270,7 @@ Draft202012Validator.check_schema(schema)
     const structured = res.structuredContent as any;
     expect(structured.status).toBe("completed");
     expect(structured.cost).toBe(0.25);
-    expect(structured.deep_link).toBe(`http://127.0.0.1:${ts.port}/preview/cg-eager`);
+    expect(structured.deep_link).toBe(`http://127.0.0.1:${ts.port}/s/cg-eager`);
     expect(structured.artifact_id).toBeDefined();
 
     // Registry updated; artifact snapshotted in the store.
@@ -344,7 +344,7 @@ Draft202012Validator.check_schema(schema)
     expect(structured.status).toBe("completed");
     expect(structured.artifact_id).toBe((create.structuredContent as any).artifact_id);
     expect(structured.cost).toBe(0.042);
-    expect(structured.deep_link).toBe(`http://127.0.0.1:${ts.port}/preview/cg-image`);
+    expect(structured.deep_link).toBe(`http://127.0.0.1:${ts.port}/s/cg-image`);
     expect(ts.registry.getJob(jobId)!.status).toBe("completed");
     await client.close();
     stopAll(ts);
