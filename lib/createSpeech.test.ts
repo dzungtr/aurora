@@ -152,7 +152,7 @@ describe("create_speech", () => {
     const structured = res.structuredContent as any;
     expect(structured.voice).toBe("af_heart");
     expect(structured.artifact_id).toBeDefined();
-    expect(structured.deep_link).toBe(`${BASE}/preview/speech-agent`);
+    expect(structured.deep_link).toBe(`${BASE}/s/speech-agent`);
     expect(structured.created).toBe(true);
 
     const call = fakeCalls.find((c) => c.path === "/audio/speech");

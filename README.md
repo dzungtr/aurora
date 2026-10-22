@@ -80,6 +80,9 @@ Aurora exposes MCP over **Streamable HTTP** at a fixed localhost URL (default `h
 | `push_chart` | Render an ECharts chart (typed contract — `chart_type` + data, not raw options) |
 | `push_image` | Push an image artifact (path, base64, or URL — snapshotted into aurora's store) |
 | `push_video` | Push a video artifact (same snapshot semantics) |
+| `list_sessions` | List sessions, most recent activity first, paginated (`offset`, `limit`, plus `total`) |
+| `list_artifacts` | List a session's artifacts with type, mime, and size — decide what is readable before reading |
+| `read_artifact` | Read one artifact, mapped by type: markdown full text; mermaid/chart/ui capped at 256 KiB with `offset` continuation; image as an MCP image block (≤4 MiB); audio/video as an unsupported-type message with the deep link |
 
 All artifacts are **immutable snapshots** copied into `~/.local/share/aurora/artifacts` at receipt time — the original source may disappear without breaking the preview (see [ADR 0002](docs/adr/0002-immutable-snapshot-artifact-store.md)).
 
@@ -90,7 +93,7 @@ All artifacts are **immutable snapshots** copied into `~/.local/share/aurora/art
 | `--port` | `7634` | HTTP + MCP port |
 | `AURORA_HOST` | `127.0.0.1` | Bind address (container images set `0.0.0.0`) |
 
-Preview deep links returned by MCP tools use, in order of precedence: `publicUrl` from the generation config (`~/.config/aurora/generation.json`, e.g. a remote ingress URL), then `http://127.0.0.1:<port>`.
+Deep links returned by MCP tools use the canonical `/s/<session_id>` form (ADR-0007) and are prefixed with, in order of precedence: `publicUrl` from the generation config (`~/.config/aurora/generation.json`, e.g. a remote ingress URL), then `http://127.0.0.1:<port>`.
 
 ## Docs
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -447,5 +447,67 @@ describe("ArtifactStore.pushMermaid", () => {
     expect(artifacts).toHaveLength(2);
     expect(artifacts.map((a) => a.type).sort()).toEqual(["markdown", "mermaid"]);
     expect(d.artifact.seq).toBe(2);
+  });
+});
+
+describe("ArtifactStore.listSessions pagination", () => {
+  const SESSION_COUNT = 120;
+  const MINUTE = 60_000;
+
+  // Written directly so last_activity is fully controlled (a push would stamp
+  // every session with the same "now").
+  function writeSession(index: number) {
+    const activity = new Date(Date.UTC(2026, 0, 1) + index * MINUTE).toISOString();
+    const sDir = sessionDir(baseDir, `s-${String(index).padStart(3, "0")}`);
+    mkdirSync(sDir, { recursive: true });
+    writeFileSync(
+      join(sDir, "meta.json"),
+      JSON.stringify({
+        session_id: `s-${String(index).padStart(3, "0")}`,
+        title: `Session ${index}`,
+        created_at: activity,
+        last_activity: activity,
+      })
+    );
+  }
+
+  beforeEach(() => {
+    for (let i = 0; i < SESSION_COUNT; i++) writeSession(i);
+  });
+
+  it("returns the first page, most recent activity first, with the full total", async () => {
+    const page = await store.listSessions(0, 50);
+    expect(page.total).toBe(SESSION_COUNT);
+    expect(page.sessions).toHaveLength(50);
+    expect(page.sessions[0].session_id).toBe("s-119");
+    expect(page.sessions[49].session_id).toBe("s-070");
+  });
+
+  it("slices later pages from the same sorted order", async () => {
+    const second = await store.listSessions(50, 50);
+    expect(second.total).toBe(SESSION_COUNT);
+    expect(second.sessions[0].session_id).toBe("s-069");
+    expect(second.sessions[49].session_id).toBe("s-020");
+
+    const last = await store.listSessions(100, 50);
+    expect(last.total).toBe(SESSION_COUNT);
+    expect(last.sessions.map((s) => s.session_id)).toEqual(
+      Array.from({ length: 20 }, (_, i) => `s-${String(19 - i).padStart(3, "0")}`)
+    );
+  });
+
+  it("returns an empty page past the end without losing the total", async () => {
+    const page = await store.listSessions(500, 50);
+    expect(page.sessions).toEqual([]);
+    expect(page.total).toBe(SESSION_COUNT);
+  });
+
+  it("keeps the unpaginated getter returning every session", async () => {
+    expect(await store.listSessions()).toHaveLength(SESSION_COUNT);
+  });
+
+  it("reports a zero total for an empty store", async () => {
+    rmSync(join(baseDir, "sessions"), { recursive: true, force: true });
+    expect(await store.listSessions(0, 50)).toEqual({ sessions: [], total: 0 });
   });
 });

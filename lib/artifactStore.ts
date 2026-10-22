@@ -48,6 +48,12 @@ export interface SessionMeta {
   last_activity: string;
 }
 
+/** One page of `ArtifactStore.listSessions`, plus the full session count. */
+export interface SessionPage {
+  sessions: SessionMeta[];
+  total: number;
+}
+
 export interface ArtifactMeta {
   artifact_id: string;
   /** per-session monotonically increasing append order; stable sort key */
@@ -148,7 +154,22 @@ export class ArtifactStore {
     }
   }
 
-  async listSessions(): Promise<SessionMeta[]> {
+  /** Every session, most recent activity first (unpaginated). */
+  async listSessions(): Promise<SessionMeta[]>;
+  /**
+   * One page of sessions, most recent activity first. `total` is the full
+   * unpaginated count so callers can page without ever seeing every session.
+   */
+  async listSessions(offset: number, limit: number): Promise<SessionPage>;
+  async listSessions(offset?: number, limit?: number): Promise<SessionMeta[] | SessionPage> {
+    const sessions = await this.readSessionsByActivity();
+    if (offset === undefined) return sessions;
+    const start = Math.max(0, offset);
+    const size = Math.max(0, limit ?? sessions.length);
+    return { sessions: sessions.slice(start, start + size), total: sessions.length };
+  }
+
+  private async readSessionsByActivity(): Promise<SessionMeta[]> {
     let entries;
     try {
       entries = await readdir(join(this.baseDir, "sessions"), { withFileTypes: true });

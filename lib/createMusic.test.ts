@@ -185,7 +185,7 @@ describe("create_music", () => {
     expect(structured.cost).toBe(0.04);
     expect(structured.transcript).toBe(TRANSCRIPT);
     expect(structured.artifact_id).toBeDefined();
-    expect(structured.deep_link).toBe(`${BASE}/preview/music-agent`);
+    expect(structured.deep_link).toBe(`${BASE}/s/music-agent`);
     expect(structured.created).toBe(true);
 
     // Auth header asserted: the fake server saw the bearer key

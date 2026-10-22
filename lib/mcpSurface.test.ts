@@ -103,9 +103,9 @@ if failures:
     });
     expect(res.isError).toBeFalsy();
     const structured = res.structuredContent as any;
-    expect(structured.deep_link).toBe(`${BASE}/preview/agent-a`);
+    expect(structured.deep_link).toBe(`${BASE}/s/agent-a`);
     expect(structured.created).toBe(true);
-    expect(JSON.stringify(res.content)).toContain("/preview/agent-a");
+    expect(JSON.stringify(res.content)).toContain("/s/agent-a");
 
     // Artifact is on disk and fetchable over HTTP
     expect(res.structuredContent).toBeDefined();
@@ -151,7 +151,7 @@ if failures:
     expect(res.isError).toBeUndefined();
     const structured = res.structuredContent as any;
     expect(structured.created).toBe(true);
-    expect(structured.deep_link).toBe(`${BASE}/preview/diag-agent`);
+    expect(structured.deep_link).toBe(`${BASE}/s/diag-agent`);
     const fetched = await (
       await fetch(`${BASE}/api/preview/sessions/diag-agent/artifacts/${structured.artifact_id}`)
     ).json();
@@ -290,7 +290,7 @@ if failures:
     });
     expect(res.isError).toBeFalsy();
     const structured = res.structuredContent as any;
-    expect(structured.deep_link).toBe(`${BASE}/preview/chart-sess`);
+    expect(structured.deep_link).toBe(`${BASE}/s/chart-sess`);
     expect(structured.created).toBe(true);
 
     const got = await (
@@ -414,7 +414,7 @@ describe("push_image / push_video", () => {
     });
     const sc = res.structuredContent as any;
     expect(res.isError).toBeFalsy();
-    expect(sc.deep_link).toBe(`${BASE}/preview/media`);
+    expect(sc.deep_link).toBe(`${BASE}/s/media`);
     const blobRes = await fetch(`${BASE}/api/preview/sessions/media/artifacts/${sc.artifact_id}/blob`);
     expect(blobRes.status).toBe(200);
     expect(blobRes.headers.get("content-type")).toBe("image/png");
@@ -460,7 +460,7 @@ describe("push_image / push_video", () => {
     });
     const sc = res.structuredContent as any;
     expect(res.isError).toBeFalsy();
-    expect(sc.deep_link).toBe(`${BASE}/preview/audio`);
+    expect(sc.deep_link).toBe(`${BASE}/s/audio`);
     expect(sc.transcript).toBe("Verse 1: hello world");
     const blobRes = await fetch(`${BASE}/api/preview/sessions/audio/artifacts/${sc.artifact_id}/blob`);
     expect(blobRes.status).toBe(200);

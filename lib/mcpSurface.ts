@@ -1,8 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
-import type { ArtifactStore, MediaSource, PushResult } from "./artifactStore";
+import type { ArtifactMeta, ArtifactStore, MediaSource, PushResult } from "./artifactStore";
 import { DEFAULT_MEDIA_SIZE_CAP } from "./artifactStore";
+import {
+  mapArtifactToContent,
+  READ_ARTIFACT_TYPE_TABLE,
+  type ArtifactReadPayload,
+} from "./artifactReads";
+import { artifactPath, sessionPath } from "./routePaths";
 import { artifactEvent, type LiveBus } from "./liveBus";
 import { CHART_TYPES, chartContractError, chartPushSchema } from "./chartContract";
 import {
@@ -154,8 +160,8 @@ function registerCreateImageTool(
             artifact_id: artifact.artifact_id,
           });
         }
-        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
-        const text = `${created ? "Generated" : "Replaced"} image artifact ${artifact.artifact_id} in session ${session_id} with ${model}. Preview: ${deep_link}`;
+        const deep_link = `${baseUrl}${sessionPath(session_id)}`;
+        const text = `${created ? "Generated" : "Replaced"} image artifact ${artifact.artifact_id} in session ${session_id} with ${model}. Deep link: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
@@ -296,8 +302,8 @@ function registerCreateSpeechTool(
             artifact_id: artifact.artifact_id,
           });
         }
-        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
-        const text = `${created ? "Generated" : "Replaced"} speech artifact ${artifact.artifact_id} in session ${session_id} with ${model}${resolvedVoice ? ` (voice ${resolvedVoice})` : ""}. Preview: ${deep_link}`;
+        const deep_link = `${baseUrl}${sessionPath(session_id)}`;
+        const text = `${created ? "Generated" : "Replaced"} speech artifact ${artifact.artifact_id} in session ${session_id} with ${model}${resolvedVoice ? ` (voice ${resolvedVoice})` : ""}. Deep link: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
@@ -395,8 +401,8 @@ function registerCreateMusicTool(
             artifact_id: artifact.artifact_id,
           });
         }
-        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
-        const text = `${created ? "Generated" : "Replaced"} audio artifact ${artifact.artifact_id} in session ${session_id} with ${model}. Preview: ${deep_link}`;
+        const deep_link = `${baseUrl}${sessionPath(session_id)}`;
+        const text = `${created ? "Generated" : "Replaced"} audio artifact ${artifact.artifact_id} in session ${session_id} with ${model}. Deep link: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
@@ -492,12 +498,12 @@ function registerCreateVideoTool(
           inputReferences: inputReferences.length > 0 ? inputReferences : undefined,
           frameImages: frameImages.length > 0 ? frameImages : undefined,
         });
-        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
+        const deep_link = `${baseUrl}${sessionPath(session_id)}`;
         const priceHint = generation.catalog?.get(model)?.priceHint ?? entry.note;
         const text =
           `Submitted video generation job ${job.job_id} with ${model}` +
           (priceHint ? ` (~${priceHint})` : "") +
-          `. It will appear in session ${session_id} when complete. Preview: ${deep_link}`;
+          `. It will appear in session ${session_id} when complete. Deep link: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
@@ -555,10 +561,10 @@ function registerCheckGenerationTool(
           providerError = poll.error;
         }
         const current = registry.getJob(job_id)!;
-        const deep_link = `${baseUrl}/preview/${encodeURIComponent(current.session_id)}`;
+        const deep_link = `${baseUrl}${sessionPath(current.session_id)}`;
         const text =
           `Generation job ${job_id} is ${current.status}` +
-          (current.artifact_id ? `; artifact ${current.artifact_id} in session ${current.session_id}. Preview: ${deep_link}` : `.`) +
+          (current.artifact_id ? `; artifact ${current.artifact_id} in session ${current.session_id}. Deep link: ${deep_link}` : `.`) +
           (providerError ? ` Provider error: ${providerError}` : "");
         return {
           content: [{ type: "text" as const, text }],
@@ -574,6 +580,198 @@ function registerCheckGenerationTool(
       }
     }
   );
+}
+
+/** Default page size for list_sessions (spec #67 D6). */
+const DEFAULT_SESSION_PAGE = 50;
+
+/** Hard ceiling on one list_sessions page, so no call can flood a context. */
+const MAX_SESSION_PAGE = 200;
+
+/**
+ * Read surface (spec #67 D3/D4, ADR-0008): discover sessions, decide what is
+ * readable from artifact metadata, then read content mapped by type. Every
+ * read response is produced by artifactReads.mapArtifactToContent.
+ */
+function registerReadTools(server: McpServer, store: ArtifactStore, baseUrl: string) {
+  server.registerTool(
+    "list_sessions",
+    {
+      title: "List sessions",
+      description:
+        "List aurora sessions, most recent activity first, paginated. Returns {sessions, total, offset, limit}; " +
+        "each session carries session_id, title, created_at, last_activity. " +
+        "Page with offset until offset + sessions.length reaches total. " +
+        "Use list_artifacts(session_id) to see what a session produced.",
+      inputSchema: {
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("Zero-based index of the first session to return (default 0)"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAX_SESSION_PAGE)
+          .optional()
+          .describe(`Page size (default ${DEFAULT_SESSION_PAGE}, max ${MAX_SESSION_PAGE})`),
+      },
+    },
+    async ({ offset, limit }) => {
+      try {
+        const pageOffset = offset ?? 0;
+        const pageLimit = limit ?? DEFAULT_SESSION_PAGE;
+        const page = await store.listSessions(pageOffset, pageLimit);
+        const text =
+          page.sessions.length === 0
+            ? `No sessions at offset ${pageOffset} (${page.total} total).`
+            : `${page.sessions.length} of ${page.total} sessions (offset ${pageOffset}, limit ${pageLimit}), most recent activity first:\n` +
+              page.sessions
+                .map(
+                  (s) =>
+                    `${s.session_id} | ${s.title} | last_activity ${s.last_activity} | created ${s.created_at}`
+                )
+                .join("\n");
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: {
+            sessions: page.sessions,
+            total: page.total,
+            offset: pageOffset,
+            limit: pageLimit,
+          },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_artifacts",
+    {
+      title: "List session artifacts",
+      description:
+        "List a session's artifacts in push order with type, mime, and size — decide here which ones you can read, " +
+        "then call read_artifact for the content.\n" +
+        READ_ARTIFACT_TYPE_TABLE,
+      inputSchema: {
+        session_id: ID_SCHEMA.describe("Session id from list_sessions, or one you minted yourself"),
+      },
+    },
+    async ({ session_id }) => {
+      try {
+        const session = await store.getSession(session_id);
+        if (!session) {
+          return toolError(
+            `Unknown session ${session_id}. Use list_sessions to see existing sessions, or push an artifact to create one.`
+          );
+        }
+        const artifacts = await store.listArtifacts(session_id);
+        const text =
+          artifacts.length === 0
+            ? `Session ${session_id} (${session.title}) has no artifacts yet.`
+            : `${artifacts.length} artifacts in session ${session_id} (${session.title}):\n` +
+              artifacts
+                .map(
+                  (a) =>
+                    `${a.artifact_id} | ${a.type} | ${a.title} | mime ${a.mime ?? "-"} | ` +
+                    `${a.size === undefined ? "-" : `${a.size} bytes`} | seq ${a.seq} | updated ${a.updated_at}`
+                )
+                .join("\n");
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: {
+            session_id,
+            session_title: session.title,
+            artifacts,
+            total: artifacts.length,
+            deep_link: `${baseUrl}${sessionPath(session_id)}`,
+          },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+
+  server.registerTool(
+    "read_artifact",
+    {
+      title: "Read artifact",
+      description:
+        "Read one artifact's content, mapped by artifact type so you only ever receive content you can consume.\n" +
+        READ_ARTIFACT_TYPE_TABLE +
+        "\nWhen a mermaid/chart/ui read is truncated, call again with the offset stated in the marker.",
+      inputSchema: {
+        session_id: ID_SCHEMA.describe("Session id that owns the artifact"),
+        artifact_id: ID_SCHEMA.describe("Artifact id from list_artifacts"),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            "Byte offset to continue a truncated mermaid/chart/ui read from; use the offset stated in the truncation marker"
+          ),
+      },
+    },
+    async ({ session_id, artifact_id, offset }) => {
+      try {
+        const meta = await store.getArtifactMeta(session_id, artifact_id);
+        if (!meta) {
+          return toolError(
+            `Unknown artifact ${artifact_id} in session ${session_id}. ` +
+              "Use list_sessions then list_artifacts to find a valid artifact_id."
+          );
+        }
+        const payload = await readPayload(store, session_id, meta);
+        const deep_link = `${baseUrl}${artifactPath(session_id, artifact_id)}`;
+        const content = mapArtifactToContent(meta, payload, {
+          offset,
+          deepLink: deep_link,
+          blobUrl: `${baseUrl}/api/preview/sessions/${encodeURIComponent(session_id)}/artifacts/${encodeURIComponent(artifact_id)}/blob`,
+        });
+        return {
+          content,
+          structuredContent: {
+            session_id,
+            artifact_id,
+            type: meta.type,
+            title: meta.title,
+            mime: meta.mime,
+            size: meta.size,
+            deep_link,
+          },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+}
+
+/**
+ * Load the payload a read needs: audio/video resolve to null so their bytes
+ * never enter the process (spec #67 D4). Images are loaded whole because the
+ * decoded cap is enforced by the mapper, which names the blob URL instead of
+ * shipping over-cap bytes.
+ */
+async function readPayload(
+  store: ArtifactStore,
+  sessionId: string,
+  meta: ArtifactMeta
+): Promise<ArtifactReadPayload> {
+  if (meta.type === "audio" || meta.type === "video") return null;
+  if (meta.type === "image") {
+    const blob = await store.blobPath(sessionId, meta.artifact_id);
+    if (!blob) throw new Error(`Image artifact ${meta.artifact_id} has no snapshot blob on disk`);
+    return { bytes: new Uint8Array(await Bun.file(blob).arrayBuffer()) };
+  }
+  const artifact = await store.getArtifact(sessionId, meta.artifact_id);
+  return { text: artifact?.content ?? "" };
 }
 
 export const MCP_PATH = "/mcp";
@@ -730,8 +928,8 @@ function registerPushUiTool(
         // Thin live-update event: clients refetch content over HTTP.
         liveBus?.broadcast(artifactEvent(result));
         const { artifact, created } = result;
-        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
-        const text = `${merged ? "Patched" : created ? "Pushed" : "Replaced"} UI artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
+        const deep_link = `${baseUrl}${sessionPath(session_id)}`;
+        const text = `${merged ? "Patched" : created ? "Pushed" : "Replaced"} UI artifact ${artifact.artifact_id} in session ${session_id}. Deep link: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
@@ -798,8 +996,8 @@ function registerMediaTool(
         // Thin live-update event: clients refetch content over HTTP.
         liveBus?.broadcast(artifactEvent(result));
         const { artifact, created } = result;
-        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
-        const text = `${created ? "Pushed" : "Replaced"} artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
+        const deep_link = `${baseUrl}${sessionPath(session_id)}`;
+        const text = `${created ? "Pushed" : "Replaced"} artifact ${artifact.artifact_id} in session ${session_id}. Deep link: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
@@ -882,8 +1080,8 @@ export async function handleMcpRequest(
         // Thin live-update event: clients refetch content over HTTP.
         liveBus?.broadcast(artifactEvent(result));
         const { artifact, created } = result;
-        const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
-        const text = `${created ? "Pushed" : "Replaced"} artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
+        const deep_link = `${baseUrl}${sessionPath(session_id)}`;
+        const text = `${created ? "Pushed" : "Replaced"} artifact ${artifact.artifact_id} in session ${session_id}. Deep link: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
@@ -991,8 +1189,8 @@ export async function handleMcpRequest(
       // Thin live-update event: clients refetch content over HTTP.
       liveBus?.broadcast(artifactEvent(result));
       const { artifact, created } = result;
-      const deep_link = `${baseUrl}/preview/${encodeURIComponent(session_id)}`;
-      const text = `${created ? "Pushed" : "Replaced"} chart artifact ${artifact.artifact_id} in session ${session_id}. Preview: ${deep_link}`;
+      const deep_link = `${baseUrl}${sessionPath(session_id)}`;
+      const text = `${created ? "Pushed" : "Replaced"} chart artifact ${artifact.artifact_id} in session ${session_id}. Deep link: ${deep_link}`;
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: {
@@ -1006,6 +1204,8 @@ export async function handleMcpRequest(
   );
 
   registerPushUiTool(server, store, baseUrl, liveBus);
+
+  registerReadTools(server, store, baseUrl);
 
   await server.connect(transport);
   try {
