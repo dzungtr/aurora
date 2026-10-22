@@ -107,7 +107,7 @@ beforeAll(async () => {
     { id: "hexgrad/kokoro-82m", default: true, default_voice: "af_heart" },
     { id: "elevenlabs/eleven-v4", default_voice: "Rachel", supports_voice_cloning: true },
   ]);
-  server = createServer(root, PORT, {
+  server = createServer(PORT, {
     artifactsDir,
     generation: {
       apiKey: API_KEY,

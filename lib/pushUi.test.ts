@@ -15,7 +15,6 @@ const BASE = `http://127.0.0.1:${PORT}`;
 
 delete process.env.OPENROUTER_API_KEY;
 
-let root: string;
 let artifactsDir: string;
 let server: ReturnType<typeof createServer>;
 
@@ -30,14 +29,12 @@ card1 = Card([t1])
 t1 = Text("hello aurora")`;
 
 beforeAll(async () => {
-  root = mkdtempSync(join(tmpdir(), "aurora-push-ui-root-"));
   artifactsDir = mkdtempSync(join(tmpdir(), "aurora-push-ui-artifacts-"));
-  server = createServer(root, PORT, { artifactsDir });
+  server = createServer(PORT, { artifactsDir });
 });
 
 afterAll(() => {
   server?.stop(true);
-  rmSync(root, { recursive: true, force: true });
   rmSync(artifactsDir, { recursive: true, force: true });
 });
 

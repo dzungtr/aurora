@@ -1,4 +1,3 @@
-import { resolveSafe, PathTraversalError } from "./lib/fsSafe";
 import indexHtml from "./index.html";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -9,8 +8,6 @@ import { loadPublicUrl } from "./lib/whitelist";
 import { OpenRouterClient, priceHintForEntry, videoPriceHintForEntry } from "./lib/openrouter";
 import { JobRegistry } from "./lib/jobRegistry";
 import { VideoJobService } from "./lib/videoGeneration";
-import { readdir, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
-import { resolve } from "node:path";
 import pdfWorkerPath from "pdfjs-dist/build/pdf.worker.min.mjs" with { type: "file" };
 // pdfjs-dist ships a dead `if (isNodeJS) { await import("fs") ... }` branch for
 // server-side use that Bun's bundler can't tree-shake. `bun run compile` marks
@@ -22,37 +19,10 @@ function errorResponse(status: number, message: string) {
 }
 
 function handleError(err: unknown) {
-  if (err instanceof PathTraversalError) return errorResponse(400, "Invalid path");
   if (err instanceof InvalidArtifactIdError) return errorResponse(404, "Not found");
   if ((err as any)?.code === "ENOENT") return errorResponse(404, "Not found");
   console.error(err);
   return errorResponse(500, "Internal server error");
-}
-
-async function readJsonBody(req: Request): Promise<any> {
-  try {
-    return await req.json();
-  } catch {
-    throw new SyntaxError("Invalid JSON body");
-  }
-}
-
-interface TreeNode { path: string; isDir: boolean; size?: number; mtime: number }
-
-async function listTree(dir: string, base: string): Promise<TreeNode[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const results: TreeNode[] = [];
-  for (const entry of entries) {
-    const abs = join(dir, entry.name);
-    const rel = base ? `${base}/${entry.name}` : entry.name;
-    const isDir = entry.isDirectory();
-    const info = await stat(abs);
-    results.push({ path: rel, isDir, size: isDir ? undefined : info.size, mtime: info.mtimeMs });
-    if (isDir) {
-      results.push(...(await listTree(abs, rel)));
-    }
-  }
-  return results;
 }
 
 export interface ServerOptions {
@@ -143,8 +113,7 @@ export function resolvePublicBaseUrl(externalPort: number, publicUrl?: string): 
   return `http://127.0.0.1:${externalPort}`;
 }
 
-export function createServer(rootDir: string, port: number, options: ServerOptions = {}) {
-  const root = resolve(rootDir);
+export function createServer(port: number, options: ServerOptions = {}) {
   const artifactStore = new ArtifactStore(options.artifactsDir ?? join(homedir(), ".local/share/aurora/artifacts"));
   const liveBus = new LiveBus();
   let generation: GenerationOptions | undefined = options.generation;
@@ -288,118 +257,6 @@ export function createServer(rootDir: string, port: number, options: ServerOptio
             );
             return Response.json(withCounts);
           } catch (err) {
-            return handleError(err);
-          }
-        },
-      },
-      "/api/tree": {
-        async GET() {
-          try {
-            const tree = await listTree(root, "");
-            return Response.json(tree);
-          } catch (err) {
-            return handleError(err);
-          }
-        },
-      },
-      "/api/file": {
-        async GET(req) {
-          const url = new URL(req.url);
-          const path = url.searchParams.get("path");
-          if (!path) return errorResponse(400, "Missing path");
-          try {
-            const abs = resolveSafe(root, path);
-            const file = Bun.file(abs);
-            if (!(await file.exists())) return errorResponse(404, "Not found");
-            const size = file.size;
-            const baseHeaders: Record<string, string> = {
-              "accept-ranges": "bytes",
-            };
-            const range = req.headers.get("range");
-            const m = range?.match(/^bytes=(\d*)-(\d*)$/);
-            if (m && (m[1] !== "" || m[2] !== "")) {
-              let start = m[1] === "" ? null : Number(m[1]);
-              let end = m[2] === "" ? null : Number(m[2]);
-              if (start === null) {
-                // suffix range: last N bytes
-                start = Math.max(0, size - (end ?? 0));
-                end = size - 1;
-              } else if (end === null || end >= size) {
-                end = size - 1;
-              }
-              if (start >= size || start > end) {
-                return new Response(null, {
-                  status: 416,
-                  headers: { "content-range": `bytes */${size}` },
-                });
-              }
-              return new Response(file.slice(start, end + 1), {
-                status: 206,
-                headers: {
-                  ...baseHeaders,
-                  "content-range": `bytes ${start}-${end}/${size}`,
-                  "content-length": String(end - start + 1),
-                },
-              });
-            }
-            return new Response(file, { headers: baseHeaders });
-          } catch (err) {
-            return handleError(err);
-          }
-        },
-        async POST(req) {
-          try {
-            const { path, content } = await readJsonBody(req);
-            if (!path || typeof content !== "string") return errorResponse(400, "Missing path or content");
-            const abs = resolveSafe(root, path);
-            await writeFile(abs, content, "utf-8");
-            return Response.json({ ok: true });
-          } catch (err) {
-            if (err instanceof SyntaxError) return errorResponse(400, "Invalid JSON body");
-            return handleError(err);
-          }
-        },
-        async DELETE(req) {
-          const url = new URL(req.url);
-          const path = url.searchParams.get("path");
-          if (!path) return errorResponse(400, "Missing path");
-          try {
-            const abs = resolveSafe(root, path);
-            if (abs === root) return errorResponse(400, "Cannot delete root");
-            const info = await stat(abs);
-            if (info.isDirectory()) return errorResponse(400, "Cannot delete a directory via /api/file");
-            await rm(abs);
-            return Response.json({ ok: true });
-          } catch (err) {
-            return handleError(err);
-          }
-        },
-      },
-      "/api/dir": {
-        async POST(req) {
-          try {
-            const { path } = await readJsonBody(req);
-            if (!path) return errorResponse(400, "Missing path");
-            const abs = resolveSafe(root, path);
-            await mkdir(abs, { recursive: true });
-            return Response.json({ ok: true });
-          } catch (err) {
-            if (err instanceof SyntaxError) return errorResponse(400, "Invalid JSON body");
-            return handleError(err);
-          }
-        },
-      },
-      "/api/rename": {
-        async POST(req) {
-          try {
-            const { from, to } = await readJsonBody(req);
-            if (!from || !to) return errorResponse(400, "Missing from or to");
-            const absFrom = resolveSafe(root, from);
-            const absTo = resolveSafe(root, to);
-            await rename(absFrom, absTo);
-            return Response.json({ ok: true });
-          } catch (err) {
-            if (err instanceof SyntaxError) return errorResponse(400, "Invalid JSON body");
             return handleError(err);
           }
         },

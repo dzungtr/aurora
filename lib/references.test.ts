@@ -147,7 +147,7 @@ beforeAll(async () => {
       ],
     })
   );
-  server = createServer(root, PORT, {
+  server = createServer(PORT, {
     artifactsDir,
     generation: { apiKey: API_KEY, baseUrl: FAKE_OPENROUTER, whitelistPath: configPath, dbPath },
   });
@@ -257,7 +257,7 @@ describe("create_image references", () => {
     });
     const capRoot = mkdtempSync(join(tmpdir(), "aurora-ref-cap-"));
     const capArtifacts = mkdtempSync(join(tmpdir(), "aurora-ref-cap-a-"));
-    const tinyServer = createServer(capRoot, port, {
+    const tinyServer = createServer(port, {
       artifactsDir: capArtifacts,
       mediaSizeCap: 1024,
       generation: {

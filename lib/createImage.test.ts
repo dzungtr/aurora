@@ -91,7 +91,7 @@ beforeAll(async () => {
     { id: "cheap/model", note: "budget tier", default: true, aspect_ratios: ["1:1", "16:9"] },
     { id: "premium/model", note: "premium tier" },
   ]);
-  server = createServer(root, PORT, {
+  server = createServer(PORT, {
     artifactsDir,
     generation: { apiKey: API_KEY, baseUrl: FAKE_OPENROUTER, whitelistPath: configPath },
   });
@@ -266,7 +266,7 @@ describe("generation without an API key", () => {
     const hadEnvKey = "OPENROUTER_API_KEY" in process.env;
     const envKey = process.env.OPENROUTER_API_KEY;
     delete process.env.OPENROUTER_API_KEY;
-    const s = createServer(root, port, { artifactsDir: artifacts2 });
+    const s = createServer(port, { artifactsDir: artifacts2 });
     if (hadEnvKey) process.env.OPENROUTER_API_KEY = envKey;
     try {
       const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`));

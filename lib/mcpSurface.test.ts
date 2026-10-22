@@ -15,7 +15,6 @@ const BASE = `http://127.0.0.1:${PORT}`;
 // Testing Decisions: tests run against the fake only, never live network.
 delete process.env.OPENROUTER_API_KEY;
 
-let root: string;
 let artifactsDir: string;
 let server: ReturnType<typeof createServer>;
 
@@ -26,18 +25,16 @@ function makeClient() {
 }
 
 async function startServer(cap?: number) {
-  server = createServer(root, PORT, { artifactsDir, mediaSizeCap: cap });
+  server = createServer(PORT, { artifactsDir, mediaSizeCap: cap });
 }
 
 beforeAll(async () => {
-  root = mkdtempSync(join(tmpdir(), "aurora-mcp-root-"));
   artifactsDir = mkdtempSync(join(tmpdir(), "aurora-mcp-artifacts-"));
   await startServer();
 });
 
 afterAll(() => {
   server?.stop(true);
-  rmSync(root, { recursive: true, force: true });
   rmSync(artifactsDir, { recursive: true, force: true });
 });
 
@@ -477,7 +474,6 @@ describe("push_image / push_video", () => {
     // restart the server with a tiny cap to make the push exceed it cheaply
     server.stop(true);
     artifactsDir = mkdtempSync(join(tmpdir(), "aurora-mcp-artifacts-cap-"));
-    root = mkdtempSync(join(tmpdir(), "aurora-mcp-root-cap-"));
     await startServer(6); // 6-byte cap
     const { client, transport } = makeClient();
     await client.connect(transport);
@@ -495,7 +491,6 @@ describe("push_image / push_video", () => {
     expect(text).toContain("path");
     await client.close();
     server.stop(true);
-    rmSync(root, { recursive: true, force: true });
     rmSync(artifactsDir, { recursive: true, force: true });
     await startServer();
   });
