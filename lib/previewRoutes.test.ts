@@ -61,8 +61,8 @@ describe("GET /api/preview/sessions/:sid/artifacts", () => {
   });
 });
 
-describe("preview deep links serve the SPA", () => {
-  it.each(["/preview", "/preview/routes-sess", "/preview/routes-sess/a1"])(
+describe("SPA page routes serve the shell, preview routes 404", () => {
+  it.each(["/", "/s/routes-sess", "/s/routes-sess/a1"])(
     "serves index HTML for %s",
     async (path) => {
       const res = await fetch(`${base}${path}`);
@@ -71,4 +71,9 @@ describe("preview deep links serve the SPA", () => {
       expect(await res.text()).toContain('id="root"');
     }
   );
+
+  it.each(["/preview", "/preview/routes-sess"])("%s returns 404", async (path) => {
+    const res = await fetch(`${base}${path}`, { redirect: "manual" });
+    expect(res.status).toBe(404);
+  });
 });

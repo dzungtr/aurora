@@ -40,24 +40,24 @@ async function handle<T>(res: Response): Promise<T> {
 
 export const previewApi = {
   async listSessions(): Promise<SessionWithCount[]> {
-    return handle(await fetch("/api/s/sessions"));
+    return handle(await fetch("/api/preview/sessions"));
   },
 
   async listArtifacts(sessionId: string): Promise<ArtifactMeta[]> {
-    return handle(await fetch(`/api/s/sessions/${encodeURIComponent(sessionId)}/artifacts`));
+    return handle(await fetch(`/api/preview/sessions/${encodeURIComponent(sessionId)}/artifacts`));
   },
 
   async getArtifact(sessionId: string, artifactId: string): Promise<Artifact> {
     // Server shape: { session_id, meta, content } — flatten meta for the UI.
     const raw = await handle<{ session_id: string; meta: ArtifactMeta; content: string }>(
-      await fetch(`/api/s/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`)
+      await fetch(`/api/preview/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`)
     );
     return { ...raw.meta, session_id: raw.session_id, content: raw.content };
   },
 
   /** Delete a session and all its artifacts from the store. */
   async deleteSession(sessionId: string): Promise<void> {
-    const res = await fetch(`/api/s/sessions/${encodeURIComponent(sessionId)}`, {
+    const res = await fetch(`/api/preview/sessions/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
     });
     if (!res.ok) {

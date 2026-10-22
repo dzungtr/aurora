@@ -150,7 +150,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           return errorResponse(405, "No sessions in stateless mode");
         },
       },
-      "/api/s/sessions/:sid": {
+      "/api/preview/sessions/:sid": {
         async DELETE(req) {
           const { sid } = (req as any).params ?? {};
           try {
@@ -162,7 +162,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           }
         },
       },
-      "/api/s/sessions/:sid/artifacts/:aid/blob": {
+      "/api/preview/sessions/:sid/artifacts/:aid/blob": {
         // Media snapshot serving. Range support (206) is implemented manually
         // so video seeking works; Bun routes don't apply Range to Blob parts.
         async GET(req) {
@@ -210,7 +210,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           }
         },
       },
-      "/api/s/sessions/:sid/artifacts/:aid": {
+      "/api/preview/sessions/:sid/artifacts/:aid": {
         async GET(req) {
           const { sid, aid } = (req as any).params ?? {};
           try {
@@ -222,7 +222,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           }
         },
       },
-      "/api/s/sessions/:sid/artifacts": {
+      "/api/preview/sessions/:sid/artifacts": {
         async GET(req) {
           const { sid } = (req as any).params ?? {};
           try {
@@ -234,7 +234,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           }
         },
       },
-      "/api/s/sessions": {
+      "/api/preview/sessions": {
         async GET() {
           try {
             const sessions = await artifactStore.listSessions();

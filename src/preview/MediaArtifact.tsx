@@ -6,7 +6,7 @@ import { previewApi } from "./previewApi";
 import type { Artifact } from "./previewApi";
 
 export function blobUrl(sessionId: string, artifactId: string): string {
-  return `/api/s/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/blob`;
+  return `/api/preview/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/blob`;
 }
 
 export function MediaArtifact({ artifact }: { artifact: Artifact }) {
