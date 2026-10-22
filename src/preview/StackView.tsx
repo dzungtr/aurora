@@ -27,6 +27,7 @@ import { getFollow, setFollow } from "./followStore";
 import { getSidebar, setSidebar, subscribeSidebar, type SidebarState } from "./sidebarStore";
 import { useUnreadCounts } from "./unreadStore";
 import { useTheme, type Theme } from "../lib/themeStore";
+import { SESSION_ROUTE_PREFIX } from "../../lib/routePaths";
 
 export interface StackViewProps {
   sessionId: string;
@@ -205,7 +206,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
         {/* LEFT: SESSION RAIL (collapsible) */}
         {sidebar.left ? (
         <aside className="aur-stack3__rail">
-          <a className="aur-stack3__railback" href="/s">
+          <a className="aur-stack3__railback" href={SESSION_ROUTE_PREFIX}>
             <Icon name="uil:angle-left" size={17} /> All sessions
           </a>
           <div className="aur-stack3__raillist">

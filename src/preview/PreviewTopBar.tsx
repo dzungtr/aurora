@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
+import { SESSION_ROUTE_PREFIX } from "../../lib/routePaths";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { totalUnread, useUnreadCounts } from "./unreadStore";
 
@@ -30,7 +31,7 @@ export function PreviewTopBar() {
       </div>
 
       <nav className="aur-preview__nav">
-        <a className="aur-preview__navlink is-active" href="/s">
+        <a className="aur-preview__navlink is-active" href={SESSION_ROUTE_PREFIX}>
           <Icon name="uil:presentation-play" size={16} /> Artifacts
           {unread > 0 && <span className="aur-preview__navbadge">{unread}</span>}
         </a>
