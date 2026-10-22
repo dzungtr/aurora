@@ -8,11 +8,6 @@ import { loadPublicUrl } from "./lib/whitelist";
 import { OpenRouterClient, priceHintForEntry, videoPriceHintForEntry } from "./lib/openrouter";
 import { JobRegistry } from "./lib/jobRegistry";
 import { VideoJobService } from "./lib/videoGeneration";
-import pdfWorkerPath from "pdfjs-dist/build/pdf.worker.min.mjs" with { type: "file" };
-// pdfjs-dist ships a dead `if (isNodeJS) { await import("fs") ... }` branch for
-// server-side use that Bun's bundler can't tree-shake. `bun run compile` marks
-// fs/http/https/url external (see package.json) so that branch — never reached
-// in the browser, where PDFs load via fetch — doesn't fail the standalone build.
 
 function errorResponse(status: number, message: string) {
   return Response.json({ error: message }, { status });
@@ -135,16 +130,10 @@ export function createServer(port: number, options: ServerOptions = {}) {
     development: process.env.NODE_ENV !== "production",
     routes: {
       "/": indexHtml,
-      // SPA deep links for the preview surface: serve the app shell and let the
-      // client router resolve the session/artifact.
-      "/preview": indexHtml,
-      "/preview/:sid": indexHtml,
-      "/preview/:sid/:aid": indexHtml,
-      "/pdf.worker.min.mjs": {
-        async GET() {
-          return new Response(Bun.file(pdfWorkerPath));
-        },
-      },
+      // SPA deep links for the artifact browser:
+      "/s": indexHtml,
+      "/s/:sid": indexHtml,
+      "/s/:sid/:aid": indexHtml,
       "/mcp": {
         async POST(req) {
           try {
@@ -161,7 +150,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           return errorResponse(405, "No sessions in stateless mode");
         },
       },
-      "/api/preview/sessions/:sid": {
+      "/api/s/sessions/:sid": {
         async DELETE(req) {
           const { sid } = (req as any).params ?? {};
           try {
@@ -173,7 +162,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           }
         },
       },
-      "/api/preview/sessions/:sid/artifacts/:aid/blob": {
+      "/api/s/sessions/:sid/artifacts/:aid/blob": {
         // Media snapshot serving. Range support (206) is implemented manually
         // so video seeking works; Bun routes don't apply Range to Blob parts.
         async GET(req) {
@@ -221,7 +210,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           }
         },
       },
-      "/api/preview/sessions/:sid/artifacts/:aid": {
+      "/api/s/sessions/:sid/artifacts/:aid": {
         async GET(req) {
           const { sid, aid } = (req as any).params ?? {};
           try {
@@ -233,7 +222,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           }
         },
       },
-      "/api/preview/sessions/:sid/artifacts": {
+      "/api/s/sessions/:sid/artifacts": {
         async GET(req) {
           const { sid } = (req as any).params ?? {};
           try {
@@ -245,7 +234,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
           }
         },
       },
-      "/api/preview/sessions": {
+      "/api/s/sessions": {
         async GET() {
           try {
             const sessions = await artifactStore.listSessions();

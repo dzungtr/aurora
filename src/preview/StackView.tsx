@@ -205,7 +205,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
         {/* LEFT: SESSION RAIL (collapsible) */}
         {sidebar.left ? (
         <aside className="aur-stack3__rail">
-          <a className="aur-stack3__railback" href="/preview">
+          <a className="aur-stack3__railback" href="/s">
             <Icon name="uil:angle-left" size={17} /> All sessions
           </a>
           <div className="aur-stack3__raillist">

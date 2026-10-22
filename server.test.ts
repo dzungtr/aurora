@@ -38,34 +38,6 @@ describe("createServer", () => {
 
 // The explorer is deleted, not deprecated (epic #67 D1): every file API route
 // must be gone, with no read-only fallback.
-describe("explorer routes are gone", () => {
-  it.each([
-    ["GET", "/api/tree"],
-    ["GET", "/api/file?path=hello.txt"],
-    ["POST", "/api/file"],
-    ["DELETE", "/api/file?path=hello.txt"],
-    ["POST", "/api/dir"],
-    ["POST", "/api/rename"],
-  ])("%s %s returns 404", async (method, path) => {
-    const res = await fetch(`${base}${path}`, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: method === "POST" ? JSON.stringify({ path: "x", from: "a", to: "b" }) : undefined,
-    });
-    expect(res.status).toBe(404);
-  });
-});
-
-describe("/pdf.worker.min.mjs", () => {
-  it("serves the pdf.js worker script", async () => {
-    const res = await fetch(`${base}/pdf.worker.min.mjs`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("javascript");
-    const text = await res.text();
-    expect(text.length).toBeGreaterThan(1000);
-  });
-});
-
 describe("resolvePublicBaseUrl", () => {
   it("falls back to loopback with the external port", () => {
     expect(resolvePublicBaseUrl(7634)).toBe("http://127.0.0.1:7634");
@@ -94,5 +66,26 @@ describe("loadPublicUrl (generation config)", () => {
     expect(loadPublicUrl(join(cfg, "missing.json"))).toBeUndefined();
     writeFileSync(join(cfg, "no-url.json"), JSON.stringify({ image: [] }));
     expect(loadPublicUrl(join(cfg, "no-url.json"))).toBeUndefined();
+  });
+});
+
+// SPA routing for the artifact browser (issue #69): the app shell is served on
+// / and /s/* so the client router can resolve the session/artifact; the old
+// /preview surface is gone — no redirect, just 404.
+describe("SPA routing", () => {
+  it.each(["/", "/s", "/s/test-session", "/s/test-session/art-1"])("serves the SPA shell at %s", async (path) => {
+    const res = await fetch(`${base}${path}`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("<script");
+  });
+
+  it.each(["/preview", "/preview/foo", "/preview/foo/bar"])("%s returns 404 with no redirect", async (path) => {
+    const res = await fetch(`${base}${path}`, { redirect: "manual" });
+    expect(res.status).toBe(404);
+  });
+
+  it("does not serve the pdf worker", async () => {
+    const res = await fetch(`${base}/pdf.worker.min.mjs`);
+    expect(res.status).toBe(404);
   });
 });

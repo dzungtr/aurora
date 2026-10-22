@@ -33,7 +33,7 @@ export function PreviewTopBar() {
         <a className="aur-preview__navlink" href="/">
           <Icon name="uil:folder" size={16} /> Files
         </a>
-        <a className="aur-preview__navlink is-active" href="/preview">
+        <a className="aur-preview__navlink is-active" href="/s">
           <Icon name="uil:presentation-play" size={16} /> Artifacts
           {unread > 0 && <span className="aur-preview__navbadge">{unread}</span>}
         </a>
