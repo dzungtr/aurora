@@ -109,7 +109,9 @@ function cappedText(meta: ArtifactMeta, text: string, offset: number): McpConten
   const bytes = Buffer.from(text, "utf8");
   const total = bytes.length;
   const start = Math.max(0, offset);
-  if (start >= total && total > 0) {
+  // A zero-offset read of an empty source is still a valid empty chunk, but a
+  // nonzero offset into an empty source is past the end and must get guidance.
+  if (start > 0 && start >= total) {
     return [
       {
         type: "text",

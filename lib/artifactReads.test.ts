@@ -103,6 +103,14 @@ describe("mapArtifactToContent — capped text types (mermaid/chart/ui)", () => 
     expect(text).toContain("offset 4000 is past the end");
     expect(text).toContain("2 bytes");
   });
+
+  it("reports an out-of-range offset for an empty source too", () => {
+    const text = textOf(
+      mapArtifactToContent(meta({ type: "mermaid" }), { text: "" }, { offset: 10 })
+    );
+    expect(text).toContain("offset 10 is past the end");
+    expect(text).toContain("0 bytes");
+  });
 });
 
 describe("mapArtifactToContent — image", () => {

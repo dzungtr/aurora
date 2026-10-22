@@ -20,7 +20,6 @@ t1 = Text("hello aurora")`;
 // under test (they need no provider).
 delete process.env.OPENROUTER_API_KEY;
 
-let root: string;
 let artifactsDir: string;
 let server: ReturnType<typeof createServer>;
 
@@ -46,14 +45,12 @@ function textBlock(res: Awaited<ReturnType<typeof call>>) {
 }
 
 beforeAll(() => {
-  root = mkdtempSync(join(tmpdir(), "aurora-read-root-"));
   artifactsDir = mkdtempSync(join(tmpdir(), "aurora-read-artifacts-"));
-  server = createServer(root, PORT, { artifactsDir });
+  server = createServer(PORT, { artifactsDir });
 });
 
 afterAll(() => {
   server?.stop(true);
-  rmSync(root, { recursive: true, force: true });
   rmSync(artifactsDir, { recursive: true, force: true });
 });
 
