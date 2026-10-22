@@ -1,10 +1,11 @@
-// Shared header for the preview surface: brand, Files/Artifacts nav (with a
+// Shared header for the preview surface: brand, Artifacts nav (with a
 // real unread badge summed across sessions), and the same-origin MCP
 // connection pill. The endpoint is always "connected" — this page loaded
 // from that same server, so there is nothing to health-check.
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
+import { SESSION_ROUTE_PREFIX } from "../../lib/routePaths";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { totalUnread, useUnreadCounts } from "./unreadStore";
 
@@ -30,10 +31,7 @@ export function PreviewTopBar() {
       </div>
 
       <nav className="aur-preview__nav">
-        <a className="aur-preview__navlink" href="/">
-          <Icon name="uil:folder" size={16} /> Files
-        </a>
-        <a className="aur-preview__navlink is-active" href="/preview">
+        <a className="aur-preview__navlink is-active" href={SESSION_ROUTE_PREFIX}>
           <Icon name="uil:presentation-play" size={16} /> Artifacts
           {unread > 0 && <span className="aur-preview__navbadge">{unread}</span>}
         </a>

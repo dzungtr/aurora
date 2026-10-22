@@ -1,6 +1,7 @@
-// HTTP client for the preview surface (/preview routes + artifact read API).
+// HTTP client for the artifact browser (/s routes + artifact read API).
 // Mirrors the ArtifactStore shapes served by server.ts; UI logic stays here,
 // the server stays storage-shaped.
+import { SESSION_ROUTE_PREFIX, sessionPath, artifactPath } from "../../lib/routePaths";
 
 export interface SessionMeta {
   session_id: string;
@@ -72,9 +73,11 @@ export function latestOf(artifacts: ArtifactMeta[]): ArtifactMeta | null {
   return artifacts.reduce((a, b) => (b.seq > a.seq ? b : a));
 }
 
-/** Parse /preview[/:sid[/:aid]] into { sid, aid }; null when not a preview route. */
+/** Parse the SPA path (root or /s/...) into { sid, aid }; null when unmatched. */
 export function parsePreviewPath(pathname: string): { sid?: string; aid?: string } | null {
-  const m = pathname.match(/^\/preview(?:\/([^/]+)(?:\/([^/]+))?)?\/?$/);
+  if (pathname === "/" || pathname === SESSION_ROUTE_PREFIX || pathname === `${SESSION_ROUTE_PREFIX}/`) return {};
+  const re = new RegExp(`^${SESSION_ROUTE_PREFIX}/([^/]+)(?:/([^/]+))?/?$`);
+  const m = pathname.match(re);
   if (!m) return null;
   try {
     return {
@@ -87,7 +90,7 @@ export function parsePreviewPath(pathname: string): { sid?: string; aid?: string
 }
 
 export function previewUrl(sid: string, aid?: string): string {
-  return aid ? `/preview/${encodeURIComponent(sid)}/${encodeURIComponent(aid)}` : `/preview/${encodeURIComponent(sid)}`;
+  return aid ? artifactPath(sid, aid) : sessionPath(sid);
 }
 
 /** Client-side navigation: pushState + notify subscribers (App's router). */

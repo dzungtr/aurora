@@ -6,13 +6,9 @@ import { LiveBus } from "./lib/liveBus";
 import { handleMcpRequest, type GenerationOptions } from "./lib/mcpSurface";
 import { loadPublicUrl } from "./lib/whitelist";
 import { OpenRouterClient, priceHintForEntry, videoPriceHintForEntry } from "./lib/openrouter";
+import { SESSION_ROUTE_PREFIX } from "./lib/routePaths";
 import { JobRegistry } from "./lib/jobRegistry";
 import { VideoJobService } from "./lib/videoGeneration";
-import pdfWorkerPath from "pdfjs-dist/build/pdf.worker.min.mjs" with { type: "file" };
-// pdfjs-dist ships a dead `if (isNodeJS) { await import("fs") ... }` branch for
-// server-side use that Bun's bundler can't tree-shake. `bun run compile` marks
-// fs/http/https/url external (see package.json) so that branch — never reached
-// in the browser, where PDFs load via fetch — doesn't fail the standalone build.
 
 function errorResponse(status: number, message: string) {
   return Response.json({ error: message }, { status });
@@ -135,16 +131,10 @@ export function createServer(port: number, options: ServerOptions = {}) {
     development: process.env.NODE_ENV !== "production",
     routes: {
       "/": indexHtml,
-      // SPA deep links for the preview surface: serve the app shell and let the
-      // client router resolve the session/artifact.
-      "/preview": indexHtml,
-      "/preview/:sid": indexHtml,
-      "/preview/:sid/:aid": indexHtml,
-      "/pdf.worker.min.mjs": {
-        async GET() {
-          return new Response(Bun.file(pdfWorkerPath));
-        },
-      },
+      // SPA deep links for the artifact browser (path shape from routePaths):
+      [SESSION_ROUTE_PREFIX]: indexHtml,
+      [`${SESSION_ROUTE_PREFIX}/:sid`]: indexHtml,
+      [`${SESSION_ROUTE_PREFIX}/:sid/:aid`]: indexHtml,
       "/mcp": {
         async POST(req) {
           try {

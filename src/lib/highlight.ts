@@ -3,7 +3,7 @@
 // Both outputs are HTML-escaped at the source, so they are safe for
 // dangerouslySetInnerHTML. Markdown links are additionally URL-sanitised.
 
-import type { FileKind } from "./fileTypes";
+export type FileKind = "code" | "json" | "css" | "text";
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
