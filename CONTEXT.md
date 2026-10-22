@@ -1,6 +1,6 @@
 # Aurora
 
-Local-first web app that doubles as a file explorer and a live artifact preview host for TUI coding agents. Agents push artifacts over MCP; aurora renders them with house styling and live-updates the human's browser.
+Single-instance artifact host for TUI coding agents. Agents push artifacts over MCP and read them back over the same surface; aurora renders artifacts with house styling and live-updates the human's browser. Aurora does exactly one job — there is no file explorer (ADR-0007).
 
 ## Language
 
@@ -19,7 +19,7 @@ A tool call adding an artifact. Without `artifact_id` it appends a new artifact 
 _Avoid_: publish, upload, post
 
 **Stack**:
-A session's artifacts ordered oldest→newest; the newest sits on top and the preview auto-advances to it.
+A session's artifacts ordered oldest→newest; the newest sits on top and the artifact view auto-advances to it.
 _Avoid_: history, feed
 
 **Snapshot**:
@@ -53,14 +53,33 @@ _Avoid_: spec, layout, source file
 A push mode sending only changed statements; merged server-side into a new full-program snapshot, never stored as a delta.
 _Avoid_: diff, delta, partial update
 
-### Live preview
+### Agent read surface
+
+**Read surface**:
+The three read tools (`list_sessions`, `list_artifacts`, `read_artifact`) alongside the push/generate tools; the surface is no longer write-only (ADR-0008).
+_Avoid_: query API, download tools
+
+**Content-type awareness**:
+The contract that `list_artifacts` returns type/mime/size per artifact so the model decides what it can understand before reading, and `read_artifact` responses are mapped by artifact type so a model only receives content it can consume.
+_Avoid_: content negotiation, transcoding
+
+**Type-mapped response**:
+`read_artifact`'s per-type output: markdown → full text; mermaid/chart/ui → capped text with offset continuation; image → MCP image content block; audio/video → unsupported-type message, bytes never cross MCP.
+_Avoid_: raw download, blob response
+
+### Live updates
 
 **Live bus**:
 The WebSocket channel broadcasting thin push/update events; clients refetch content over HTTP.
 _Avoid_: notifier, push channel
 
 **Deep link**:
-`/preview/<session_id>` URL returned in every tool response so agents can surface a clickable link in the TUI.
+`/s/<session_id>` URL returned in every tool response so agents can surface a clickable link in the TUI.
+_Avoid_: preview link (retired — `/preview/*` is dead, ADR-0007)
+
+**Session mount**:
+Clicking a session in the session list scopes the artifact view to that session only.
+_Avoid_: open folder, navigate into
 
 **Auto-advance**:
 Behavior where a viewed session's stack advances to a newly pushed artifact. Never navigates the user away from a different session — that gets a badge.
