@@ -38,6 +38,34 @@ describe("createServer", () => {
 
 // The explorer is deleted, not deprecated (epic #67 D1): every file API route
 // must be gone, with no read-only fallback.
+describe("explorer routes are gone", () => {
+  it.each([
+    ["GET", "/api/tree"],
+    ["GET", "/api/file"],
+    ["GET", "/api/dir"],
+    ["GET", "/api/rename"],
+    ["POST", "/api/tree"],
+    ["POST", "/api/file"],
+    ["POST", "/api/dir"],
+    ["POST", "/api/rename"],
+    ["PUT", "/api/tree"],
+    ["PUT", "/api/file"],
+    ["PUT", "/api/dir"],
+    ["PUT", "/api/rename"],
+    ["DELETE", "/api/tree"],
+    ["DELETE", "/api/file"],
+    ["DELETE", "/api/dir"],
+    ["DELETE", "/api/rename"],
+  ])("%s %s returns 404", async (method, path) => {
+    const res = await fetch(`${base}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: method === "GET" ? undefined : JSON.stringify({ path: "x", from: "a", to: "b" }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("resolvePublicBaseUrl", () => {
   it("falls back to loopback with the external port", () => {
     expect(resolvePublicBaseUrl(7634)).toBe("http://127.0.0.1:7634");
