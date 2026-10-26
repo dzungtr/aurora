@@ -23,6 +23,11 @@ EXPOSE 7634
 # publish step instead: `-p 127.0.0.1:7634:7634` (see run instructions).
 ENV AURORA_HOST=0.0.0.0
 
+# server.ts serves Bun's dev bundle unless NODE_ENV=production. Bun 1.4's dev
+# bundle leaves `process.env["NODE_ENV"]` unreplaced in dependencies, which
+# throws "process is not defined" in the browser.
+ENV NODE_ENV=production
+
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
   CMD bun -e "fetch('http://127.0.0.1:7634/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
