@@ -598,8 +598,16 @@
 .aur-media { display: flex; align-items: center; justify-content: center; padding: 18px; min-height: 200px; }
 .aur-media__media { max-width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }
 /* Mermaid artifact view (dark theme from mermaid.initialize; layout only here) */
-.aur-mermaid { max-width: 900px; width: 100%; display: flex; justify-content: center; }
-.aur-mermaid__svg { width: 100%; overflow: auto; }
+.aur-mermaid { max-width: 900px; width: 100%; display: flex; justify-content: center; position: relative; }
+.aur-mermaid__viewport { width: 100%; overflow: hidden; cursor: grab; touch-action: none; }
+.aur-mermaid__viewport:active { cursor: grabbing; }
+.aur-mermaid__svg { width: 100%; transform-origin: center center; }
+.aur-mermaid__controls {
+  position: absolute; top: 6px; right: 6px; z-index: 1; display: flex; align-items: center; gap: 2px;
+  padding: 2px; background: var(--e2); border: 1px solid var(--hair-strong); border-radius: 8px;
+}
+.aur-mermaid__controls .aur-iconbtn:disabled { opacity: .4; pointer-events: none; }
+.aur-mermaid__zoom-level { min-width: 38px; text-align: center; font-size: 11.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
 .aur-mermaid__svg svg { max-width: 100%; height: auto; }
 .aur-mermaid__loading { color: var(--text-light); font-size: 13px; }
 .aur-mermaid__holder { position: absolute; width: 0; height: 0; overflow: hidden; }

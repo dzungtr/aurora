@@ -5,9 +5,19 @@
 // a blank pane. Extracted from MermaidArtifact (issue #40) so the Mermaid
 // component in the aurora UI library renders through this same render path.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from "react";
 import mermaid from "mermaid";
+import { Icon } from "../components/Icon";
 import { useTheme, type Theme } from "../lib/themeStore";
+
+const MIN_SCALE = 0.25;
+const MAX_SCALE = 4;
+const ZOOM_STEP = 1.25;
+
+interface View { x: number; y: number; scale: number }
+const RESET_VIEW: View = { x: 0, y: 0, scale: 1 };
+
+const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
 const MERMAID_VARS: Record<Theme, Record<string, string>> = {
   light: {
@@ -53,6 +63,29 @@ export function MermaidView({ source }: { source: string }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const holderRef = useRef<HTMLDivElement | null>(null);
+  const [view, setView] = useState<View>(RESET_VIEW);
+  const dragRef = useRef<{ px: number; py: number } | null>(null);
+
+  const zoomBy = (factor: number) =>
+    setView((v) => ({ ...v, scale: clampScale(v.scale * factor) }));
+
+  const onWheel = (e: WheelEvent) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    zoomBy(e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
+  };
+  const onPointerDown = (e: PointerEvent) => {
+    dragRef.current = { px: e.clientX, py: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: PointerEvent) => {
+    const last = dragRef.current;
+    if (!last) return;
+    const dx = e.clientX - last.px;
+    const dy = e.clientY - last.py;
+    dragRef.current = { px: e.clientX, py: e.clientY };
+    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+  };
+  const onPointerUp = () => { dragRef.current = null; };
 
   useEffect(() => {
     let alive = true;
@@ -70,6 +103,7 @@ export function MermaidView({ source }: { source: string }) {
         if (alive) {
           setSvg(rendered);
           setError(null);
+          setView(RESET_VIEW);
         }
       } catch (err) {
         if (alive) {
@@ -100,12 +134,39 @@ export function MermaidView({ source }: { source: string }) {
       {svg === null ? (
         <p className="aur-mermaid__loading">Rendering diagram…</p>
       ) : (
-        <div
-          className="aur-mermaid__svg"
-          // Mermaid output is generated locally from the pushed source under
-          // securityLevel: "strict" (no user HTML, no event handlers).
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
+        <>
+          <div className="aur-mermaid__controls" role="group" aria-label="Diagram zoom and pan">
+            <button type="button" className="aur-iconbtn aur-iconbtn--plain" aria-label="Zoom out" title="Zoom out"
+              disabled={view.scale <= MIN_SCALE} onClick={() => zoomBy(1 / ZOOM_STEP)}>
+              <Icon name="uil:search-minus" size={14} />
+            </button>
+            <span className="aur-mermaid__zoom-level">{Math.round(view.scale * 100)}%</span>
+            <button type="button" className="aur-iconbtn aur-iconbtn--plain" aria-label="Zoom in" title="Zoom in"
+              disabled={view.scale >= MAX_SCALE} onClick={() => zoomBy(ZOOM_STEP)}>
+              <Icon name="uil:search-plus" size={14} />
+            </button>
+            <button type="button" className="aur-iconbtn aur-iconbtn--plain" aria-label="Reset zoom and pan" title="Reset view"
+              onClick={() => setView(RESET_VIEW)}>
+              <Icon name="uil:focus" size={14} />
+            </button>
+          </div>
+          <div
+            className="aur-mermaid__viewport"
+            onWheel={onWheel}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+          >
+            <div
+              className="aur-mermaid__svg"
+              style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+              // Mermaid output is generated locally from the pushed source under
+              // securityLevel: "strict" (no user HTML, no event handlers).
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          </div>
+        </>
       )}
     </div>
   );
