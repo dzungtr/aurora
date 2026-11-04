@@ -1,11 +1,13 @@
 // Markdown artifact renderer: react-markdown + remark-gfm per the spec, with
 // the house token highlighter reused for fenced code blocks (tok-* spans in
-// styles.css). Links are rendered inert (new tab, noopener) via react-markdown.
+// styles.css). ```mermaid fences render as diagrams through the shared
+// MermaidView. Links are rendered inert (new tab, noopener) via react-markdown.
 
 import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { highlight } from "../lib/highlight";
+import { MermaidView } from "./MermaidView";
 
 /** Map a fenced-code language tag to the house highlighter kinds. */
 function kindForLang(lang?: string): "code" | "json" | "css" | "text" {
@@ -22,6 +24,9 @@ function kindForLang(lang?: string): "code" | "json" | "css" | "text" {
 const CodeBlock = memo(function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
   const lang = /language-(\S+)/.exec(className ?? "")?.[1];
   const text = String(children ?? "").replace(/\n$/, "");
+  if (lang?.toLowerCase() === "mermaid") {
+    return <div className="aur-md-mermaid"><MermaidView source={text} /></div>;
+  }
   return <pre className="md-pre"><code dangerouslySetInnerHTML={{ __html: highlight(text, kindForLang(lang)) }} /></pre>;
 });
 
