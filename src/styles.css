@@ -600,12 +600,12 @@
 /* Mermaid artifact view (dark theme from mermaid.initialize; layout only here) */
 .aur-md-mermaid { margin: 12px 0; }
 .aur-md-mermaid .aur-mermaid { max-width: 100%; }
-.aur-mermaid { max-width: 900px; width: 100%; display: flex; justify-content: center; position: relative; }
+.aur-mermaid { max-width: 900px; width: 100%; display: flex; flex-direction: column; position: relative; }
 .aur-mermaid__viewport { width: 100%; overflow: hidden; cursor: grab; touch-action: none; }
 .aur-mermaid__viewport:active { cursor: grabbing; }
 .aur-mermaid__svg { width: 100%; transform-origin: center center; }
 .aur-mermaid__controls {
-  position: absolute; top: 6px; right: 6px; z-index: 1; display: flex; align-items: center; gap: 2px;
+  align-self: flex-end; margin-bottom: 6px; display: flex; align-items: center; gap: 2px;
   padding: 2px; background: var(--e2); border: 1px solid var(--hair-strong); border-radius: 8px;
 }
 .aur-mermaid__controls .aur-iconbtn:disabled { opacity: .4; pointer-events: none; }
