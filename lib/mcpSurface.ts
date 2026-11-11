@@ -734,6 +734,9 @@ function registerReadTools(server: McpServer, store: ArtifactStore, baseUrl: str
           deepLink: deep_link,
           blobUrl: `${baseUrl}/api/preview/sessions/${encodeURIComponent(session_id)}/artifacts/${encodeURIComponent(artifact_id)}/blob`,
         });
+        // Some MCP clients surface only structuredContent and drop content[], so
+        // mirror the text there; image bytes are never copied (no text block).
+        const text = content.flatMap((block) => (block.type === "text" ? [block.text] : []));
         return {
           content,
           structuredContent: {
@@ -744,6 +747,7 @@ function registerReadTools(server: McpServer, store: ArtifactStore, baseUrl: str
             mime: meta.mime,
             size: meta.size,
             deep_link,
+            ...(text.length > 0 ? { text: text.join("\n") } : {}),
           },
         };
       } catch (err) {

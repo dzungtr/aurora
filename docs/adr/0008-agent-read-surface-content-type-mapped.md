@@ -13,5 +13,6 @@ The core decision: **`read_artifact` responses are mapped by artifact type so a 
 ## Consequences
 
 - All mapping logic lives in one pure deep module (`lib/artifactReads.ts`); caps are module constants — changing them is a deliberate, testable act.
+- Text in a `read_artifact` response is mirrored into `structuredContent.text`, because some MCP clients surface only `structuredContent` and would otherwise show the agent an empty body. Image bytes are never mirrored.
 - Tool descriptions carry the type→response table verbatim; they are the agent-facing contract and must not drift from the implementation.
 - Evidence anchors (verified 2026-10-19, re-verify before changing the mapping): MCP spec 2025-11-25 ContentBlock schema; Claude platform vision docs; acplause GitHub issue #23; Z.AI vision MCP server docs.

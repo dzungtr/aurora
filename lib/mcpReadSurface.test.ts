@@ -198,6 +198,45 @@ describe("list_artifacts + read_artifact", () => {
     expect(rest.length).toBe(total - TEXT_READ_CAP_BYTES);
   });
 
+  // Some MCP clients surface only structuredContent and drop content[], so the
+  // body must be mirrored there or the agent reads an empty artifact.
+  it("mirrors a markdown body into structuredContent.text", async () => {
+    const session_id = `md-mirror-${crypto.randomUUID().slice(0, 8)}`;
+    const source = "# Report\n\n```mermaid\nflowchart LR\n  A --> B\n```\n";
+    const pushed = await call("push_markdown", { session_id, title: "Mirror", content: source });
+    const artifact_id = (pushed.structuredContent as any).artifact_id;
+
+    const res = await call("read_artifact", { session_id, artifact_id });
+    expect((res.structuredContent as any).text).toBe(source);
+    expect((res.structuredContent as any).text).toBe(textBlock(res));
+  });
+
+  it("mirrors a truncated mermaid chunk, marker included, into structuredContent.text", async () => {
+    const session_id = `diagram-mirror-${crypto.randomUUID().slice(0, 8)}`;
+    const source = "flowchart TD\n" + "x".repeat(400 * 1024 - 13);
+    const pushed = await call("push_mermaid", { session_id, title: "Mirror diagram", code: source });
+    const artifact_id = (pushed.structuredContent as any).artifact_id;
+
+    const res = await call("read_artifact", { session_id, artifact_id });
+    const mirrored = (res.structuredContent as any).text as string;
+    expect(mirrored).toBe(textBlock(res));
+    expect(mirrored).toContain(`offset=${TEXT_READ_CAP_BYTES}`);
+  });
+
+  it("does not put image bytes into structuredContent", async () => {
+    const session_id = `img-mirror-${crypto.randomUUID().slice(0, 8)}`;
+    const png = Buffer.alloc(1024, 9);
+    const pushed = await call("push_image", {
+      session_id,
+      title: "Tiny PNG",
+      source: { base64: png.toString("base64"), mime: "image/png" },
+    });
+    const artifact_id = (pushed.structuredContent as any).artifact_id;
+
+    const res = await call("read_artifact", { session_id, artifact_id });
+    expect((res.structuredContent as any).text).toBeUndefined();
+  });
+
   it("returns an image as an MCP image content block", async () => {
     const session_id = `img-${crypto.randomUUID().slice(0, 8)}`;
     const png = Buffer.alloc(2 * 1024 * 1024, 7);
