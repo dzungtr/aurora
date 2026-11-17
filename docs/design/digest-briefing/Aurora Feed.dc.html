@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora Feed</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_ds/oolio-design-system-1a52fdba-e2df-486c-9817-fe46db39e10c/colors_and_type.css">
+<link rel="stylesheet" href="_ds/oolio-design-system-1a52fdba-e2df-486c-9817-fe46db39e10c/packages/react-components/src/index.css">
+<script src="_ds/oolio-design-system-1a52fdba-e2df-486c-9817-fe46db39e10c/_ds_bundle.js"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<style>
+  @keyframes auroraToast { from { opacity:0; transform:translate(-50%,10px);} to { opacity:1; transform:translate(-50%,0);} }
+  @keyframes auroraPulse { 0%{ box-shadow:0 0 0 0 rgba(67,160,71,.45);} 70%{ box-shadow:0 0 0 6px rgba(67,160,71,0);} 100%{ box-shadow:0 0 0 0 rgba(67,160,71,0);} }
+  @keyframes auroraSlideIn { from { opacity:0; transform:translateY(14px);} to { opacity:1; transform:translateY(0);} }
+  @keyframes auroraDrawer { from { opacity:0; transform:translateX(24px);} to { opacity:1; transform:translateX(0);} }
+  @keyframes auroraFlash { 0%{ background:var(--a-sel-strong);} 100%{ background:var(--elevation1);} }
+  *{ box-sizing:border-box; }
+  [data-theme='light'], :root{
+    --a-hair:#e5e5e5; --a-hair-strong:#c4c4c4; --a-hover:rgba(0,0,0,.045);
+    --a-code:#f2f2f2; --a-sel:rgba(103,58,182,.09); --a-sel-strong:rgba(103,58,182,.13);
+    --a-sel-line:rgba(103,58,182,.55); --a-scroll:#cfcfcf; --a-scroll-hover:#b0b0b0;
+    --a-lift:0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.12);
+    --a-overlay:rgba(255,255,255,.86); --a-live:#2e7d32; --a-live-bg:rgba(67,160,71,.12);
+    --a-warn:#ef6c00; --a-warn-bg:rgba(239,108,0,.10); --a-info:#1565c0; --a-info-bg:rgba(21,101,192,.10);
+    --a-agent-a:#5e35b1; --a-agent-b:#1565c0; --a-why:#5e35b1; --a-why-bg:rgba(94,53,177,.07);
+    --a-prog-key:#5e35b1; --a-prog-str:#1565c0; --a-prog-num:#ef6c00; --a-prog-id:#00796b;
+  }
+  [data-theme='dark']{
+    --a-hair:#333333; --a-hair-strong:#4a4a4a; --a-hover:rgba(255,255,255,.05);
+    --a-code:#232323; --a-sel:rgba(103,58,182,.16); --a-sel-strong:rgba(103,58,182,.2);
+    --a-sel-line:var(--primary); --a-scroll:#3a3a3a; --a-scroll-hover:#4f4f4f;
+    --a-lift:0 0 6px rgba(0,0,0,.3);
+    --a-overlay:rgba(0,0,0,.4); --a-live:#66bb6a; --a-live-bg:rgba(67,160,71,.14);
+    --a-warn:#ffb74d; --a-warn-bg:rgba(255,183,77,.12); --a-info:#64b5f6; --a-info-bg:rgba(100,181,246,.12);
+    --a-agent-a:#9575cd; --a-agent-b:#64b5f6; --a-why:#b39ddb; --a-why-bg:rgba(149,117,205,.12);
+    --a-prog-key:#b39ddb; --a-prog-str:#90caf9; --a-prog-num:#ffcc80; --a-prog-id:#80cbc4;
+  }
+  ::-webkit-scrollbar{ width:11px; height:11px; }
+  ::-webkit-scrollbar-thumb{ background:var(--a-scroll); border-radius:7px; border:3px solid transparent; background-clip:content-box; }
+  ::-webkit-scrollbar-thumb:hover{ background:var(--a-scroll-hover); background-clip:content-box; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  .aurora-digest p{ margin:0 0 11px; line-height:1.65; }
+  .aurora-digest p:last-child{ margin-bottom:0; }
+  .aurora-mermaid svg{ width:auto; height:auto; max-width:100%; }
+  .aurora-prog{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
+  .aurora-prog .k{ color:var(--a-prog-key); font-weight:600; }
+  .aurora-prog .s{ color:var(--a-prog-str); }
+  .aurora-prog .n{ color:var(--a-prog-num); }
+  .aurora-prog .i{ color:var(--a-prog-id); }
+  .aurora-prog .c{ color:var(--text-light); }
+</style>
+</helmet>
+
+<div data-theme="{{ themeAttr }}" data-screen-label="Aurora Feed" style="height:100vh; width:100vw; display:flex; flex-direction:column; overflow:hidden; background:var(--elevation0); color:var(--text); font-family:'InterVariable',Inter,sans-serif; font-size:13px; {{ paletteVars }}">
+
+  <!-- TOP BAR -->
+  <header style="height:54px; flex:none; display:flex; align-items:center; gap:16px; padding:0 16px; background:var(--elevation1); border-bottom:1px solid var(--border-color);">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div style="width:24px; height:24px; border-radius:7px; background:var(--primary); display:flex; align-items:center; justify-content:center;">
+        <iconify-icon icon="uil:layer-group" width="15" style="color:#fff;"></iconify-icon>
+      </div>
+      <div style="font-size:15px; font-weight:700; letter-spacing:-0.01em;">Aurora</div>
+    </div>
+
+    <nav style="display:flex; align-items:center; gap:4px; margin-left:8px;">
+      <a href="#" style="height:30px; display:flex; align-items:center; gap:7px; padding:0 11px; border-radius:8px; background:var(--a-sel-strong); color:var(--text); text-decoration:none; font-size:13px; font-weight:600;">
+        <iconify-icon icon="uil:newspaper" width="16" style="color:var(--a-agent-a);"></iconify-icon> Feed
+        <span style="{{ feedBadgeStyle }}">{{ feedBadgeCount }}</span>
+      </a>
+      <a href="Aurora Artifacts.dc.html" style="height:30px; display:flex; align-items:center; gap:7px; padding:0 11px; border-radius:8px; color:var(--text-light); text-decoration:none; font-size:13px; font-weight:500;" style-hover="background:var(--a-hover); color:var(--text)">
+        <iconify-icon icon="uil:presentation-play" width="16"></iconify-icon> Artifacts
+      </a>
+    </nav>
+
+    <div style="flex:1;"></div>
+
+    <!-- LIGHT PALETTE PICKER -->
+    <div style="{{ pickerStyle }}" title="Light palette">
+      <iconify-icon icon="uil:palette" width="14" style="color:var(--text-light); margin-right:2px;"></iconify-icon>
+      <sc-for list="{{ palettes }}" as="p" hint-placeholder-count="4">
+        <button style="{{ p.style }}" onClick="{{ p.onPick }}" title="{{ p.label }}"></button>
+      </sc-for>
+      <span style="margin-left:4px; font-size:11px; color:var(--text-light); white-space:nowrap;">{{ paletteLabel }}</span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:2px; height:32px; padding:2px; background:var(--elevation0); border:1px solid var(--border-color); border-radius:8px;">
+      <button style="{{ lightBtnStyle }}" onClick="{{ onLight }}" title="Light theme"><iconify-icon icon="uil:sun" width="14"></iconify-icon></button>
+      <button style="{{ darkBtnStyle }}" onClick="{{ onDark }}" title="Dark theme"><iconify-icon icon="uil:moon" width="14"></iconify-icon></button>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:8px; height:32px; padding:0 6px 0 11px; background:var(--elevation0); border:1px solid var(--border-color); border-radius:8px;">
+      <span style="width:7px; height:7px; border-radius:50%; background:var(--positive); animation:auroraPulse 2.4s infinite;"></span>
+      <span style="font-family:ui-monospace,SFMono-Regular,monospace; font-size:11.5px; color:var(--text-body);">127.0.0.1:7634/mcp</span>
+      <button style="{{ copyEndpointStyle }}" onClick="{{ onCopyEndpoint }}" title="Copy MCP endpoint"><iconify-icon icon="{{ copyEndpointIcon }}" width="14"></iconify-icon></button>
+    </div>
+  </header>
+
+  <!-- TOPIC TABS (one channel per topic) -->
+  <div style="height:46px; flex:none; display:flex; align-items:center; gap:4px; padding:0 16px; background:var(--elevation1); border-bottom:1px solid var(--border-color);">
+    <sc-for list="{{ topics }}" as="t" hint-placeholder-count="4">
+      <button style="{{ t.tabStyle }}" style-hover="color:var(--text)" onClick="{{ t.onPick }}">
+        <iconify-icon icon="{{ t.icon }}" width="15" style="{{ t.iconStyle }}"></iconify-icon>
+        <span>{{ t.label }}</span>
+        <sc-if value="{{ t.unread }}" hint-placeholder-val="{{ false }}">
+          <span style="min-width:17px; height:17px; padding:0 5px; border-radius:9px; background:var(--primary); color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ t.unreadCount }}</span>
+        </sc-if>
+        <sc-if value="{{ t.live }}" hint-placeholder-val="{{ false }}">
+          <span style="width:6px; height:6px; border-radius:50%; background:var(--a-live);"></span>
+        </sc-if>
+      </button>
+    </sc-for>
+    <div style="flex:1;"></div>
+    <div style="display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--text-light);">
+      <iconify-icon icon="uil:channel" width="14" style="color:var(--a-agent-a);"></iconify-icon>
+      <span style="font-family:ui-monospace,SFMono-Regular,monospace; color:var(--text-body);">{{ channelId }}</span>
+      <span style="width:3px; height:3px; border-radius:50%; background:var(--text-light);"></span>
+      <span>kind=channel</span>
+      <span style="width:3px; height:3px; border-radius:50%; background:var(--text-light);"></span>
+      <span>retention {{ retentionDays }}d</span>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div style="flex:1; display:flex; min-height:0; position:relative;">
+
+    <!-- CENTER: TODAY'S BRIEFING -->
+    <main style="flex:1; min-width:0; display:flex; flex-direction:column; background:var(--elevation0);">
+
+      <!-- BRIEFING TOOLBAR -->
+      <div style="height:46px; flex:none; display:flex; align-items:center; gap:10px; padding:0 20px; border-bottom:1px solid var(--border-color);">
+        <span style="{{ typeChipStyle }}"><iconify-icon icon="uil:apps" width="13"></iconify-icon>UI</span>
+        <span style="flex:1 1 auto; min-width:0; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ briefingTitle }}</span>
+        <span style="flex:none; font-size:11.5px; color:var(--text-light); font-family:ui-monospace,SFMono-Regular,monospace;">{{ patchLabel }}</span>
+        <div style="flex:none; width:8px;"></div>
+        <button style="{{ followStyle }}" onClick="{{ onToggleFollow }}" title="Jump to newest patch as it lands">
+          <iconify-icon icon="{{ followIcon }}" width="15"></iconify-icon> Live
+        </button>
+        <button style="{{ programStyle }}" onClick="{{ onToggleProgram }}" title="Show the OpenUI program behind this briefing"><iconify-icon icon="uil:brackets-curly" width="15"></iconify-icon> Program</button>
+        <button style="{{ ghostBtnStyle }}" style-hover="border-color:var(--a-hair-strong)" onClick="{{ onCopyLink }}"><iconify-icon icon="{{ copyLinkIcon }}" width="15"></iconify-icon> {{ copyLinkLabel }}</button>
+      </div>
+
+      <!-- CONTENT -->
+      <div style="flex:1; min-height:0; overflow:auto; position:relative;">
+
+        <!-- ARCHIVED DAY -->
+        <sc-if value="{{ isArchived }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:980px; margin:0 auto; padding:40px 32px;">
+            <div style="border:1px dashed var(--a-hair-strong); border-radius:12px; padding:44px 24px; display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center;">
+              <iconify-icon icon="uil:archive" width="36" style="color:var(--elevation3);"></iconify-icon>
+              <div style="font-size:14px; font-weight:600;">{{ archivedTitle }}</div>
+              <div style="font-size:12.5px; color:var(--text-light); max-width:420px; line-height:1.55;">{{ archivedMeta }} This briefing is frozen — the channel stack keeps it for {{ retentionDays }} days, then prunes it on the next push.</div>
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <button style="{{ primaryBtnStyle }}" onClick="{{ onBackToToday }}"><iconify-icon icon="uil:arrow-up" width="14"></iconify-icon> Back to today</button>
+                <a href="Aurora Artifacts.dc.html" style="{{ ghostLinkStyle }}"><iconify-icon icon="uil:presentation-play" width="14"></iconify-icon> Open in stack</a>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isToday }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ stageStyle }}">
+            <div style="max-width:980px; margin:0 auto; padding:28px 32px 56px;">
+
+              <!-- BriefingHeader -->
+              <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-bottom:16px; border-bottom:2px solid var(--text); margin-bottom:22px;">
+                <div style="min-width:0;">
+                  <div style="font-size:10.5px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--text-light); margin-bottom:6px;">{{ topicLabel }} · daily briefing</div>
+                  <h1 style="font-size:26px; font-weight:700; margin:0; letter-spacing:-.015em; line-height:1.15;">{{ briefingDate }}</h1>
+                </div>
+                <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                  <div style="display:flex; align-items:baseline; gap:5px;"><span style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums;">{{ scanned }}</span><span style="font-size:11.5px; color:var(--text-light);">scanned</span></div>
+                  <div style="width:1px; height:22px; background:var(--border-color);"></div>
+                  <div style="display:flex; align-items:baseline; gap:5px;"><span style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--a-agent-a);">{{ kept }}</span><span style="font-size:11.5px; color:var(--text-light);">kept</span></div>
+                  <div style="width:1px; height:22px; background:var(--border-color);"></div>
+                  <div style="display:flex; align-items:baseline; gap:5px;"><span style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums;">{{ readMinutes }}</span><span style="font-size:11.5px; color:var(--text-light);">min</span></div>
+                  <sc-if value="{{ isLive }}" hint-placeholder-val="{{ true }}">
+                    <span style="display:flex; align-items:center; gap:6px; height:22px; padding:0 9px; border-radius:20px; background:var(--a-live-bg); color:var(--a-live); font-size:10.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;">
+                      <span style="width:6px; height:6px; border-radius:50%; background:var(--a-live); animation:auroraPulse 2.4s infinite;"></span> Live
+                    </span>
+                  </sc-if>
+                </div>
+              </div>
+
+              <!-- patch timeline (part of BriefingHeader) -->
+              <div style="display:flex; align-items:center; gap:0; margin:-8px 0 26px; font-size:11.5px; color:var(--text-light); flex-wrap:wrap;">
+                <sc-for list="{{ patches }}" as="p" hint-placeholder-count="3">
+                  <div style="display:flex; align-items:center; gap:7px; padding-right:14px; margin-right:14px; border-right:1px solid var(--border-color);">
+                    <iconify-icon icon="{{ p.icon }}" width="13" style="{{ p.iconStyle }}"></iconify-icon>
+                    <span style="font-family:ui-monospace,SFMono-Regular,monospace; color:var(--text-body);">{{ p.time }}</span>
+                    <span style="{{ p.labelStyle }}">{{ p.label }}</span>
+                  </div>
+                </sc-for>
+                <span>one UI artifact · patched in place</span>
+              </div>
+
+              <!-- HERO + RAIL -->
+              <div style="{{ heroGridStyle }}">
+
+                <!-- DigestCard variant=hero -->
+                <sc-if value="{{ hasHero }}" hint-placeholder-val="{{ true }}">
+                  <article style="{{ hero.cardStyle }}" style-hover="border-color:var(--a-hair-strong); box-shadow:var(--a-lift)" onClick="{{ hero.onToggle }}">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                      <span style="{{ hero.sourceStyle }}">{{ hero.source }}</span>
+                      <span style="{{ hero.langStyle }}">{{ hero.lang }}</span>
+                      <span style="font-size:11.5px; color:var(--text-light);">{{ hero.minutes }} min</span>
+                      <span style="flex:1;"></span>
+                      <button style="{{ hero.idStyle }}" style-hover="border-color:var(--a-hair-strong); color:var(--text)" onClick="{{ hero.onCopyId }}" title="Copy handle for chat: deep-read {{ hero.id }}">{{ hero.id }}</button>
+                    </div>
+                    <h2 style="font-size:24px; font-weight:700; line-height:1.2; letter-spacing:-.015em; margin:0 0 12px;">{{ hero.title }}</h2>
+                    <p style="margin:0 0 14px; font-size:15px; line-height:1.6; color:var(--text-body);">{{ hero.sapo }}</p>
+                    <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border-left:3px solid var(--a-why); background:var(--a-why-bg); border-radius:0 8px 8px 0; margin-bottom:14px;">
+                      <iconify-icon icon="uil:user-check" width="15" style="color:var(--a-why); flex:none; margin-top:2px;"></iconify-icon>
+                      <div style="font-size:12.5px; line-height:1.55; color:var(--text-body);"><span style="font-weight:600; color:var(--a-why);">Why you · </span>{{ hero.why }}</div>
+                    </div>
+
+                    <sc-if value="{{ hero.expanded }}" hint-placeholder-val="{{ false }}">
+                      <div class="aurora-digest" style="font-size:13.5px; color:var(--text-body); border-top:1px solid var(--border-color); padding-top:14px; animation:auroraSlideIn .18s ease-out;">
+                        <sc-for list="{{ hero.paras }}" as="pp" hint-placeholder-count="2"><p>{{ pp.t }}</p></sc-for>
+                        <sc-if value="{{ hero.hasChart }}" hint-placeholder-val="{{ false }}">
+                          <div style="margin-top:14px; background:var(--elevation0); border:1px solid var(--border-color); border-radius:10px; padding:12px;">
+                            <div ref="{{ hero.chartRef }}" style="width:100%; height:260px;"></div>
+                            <div style="margin-top:8px; font-size:11px; color:var(--text-light); font-family:ui-monospace,SFMono-Regular,monospace;">Chart · child of Card · push_chart contract</div>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ hero.hasMermaid }}" hint-placeholder-val="{{ false }}">
+                          <div style="margin-top:14px; background:var(--elevation0); border:1px solid var(--border-color); border-radius:10px; padding:16px; overflow:auto;">
+                            <div class="aurora-mermaid" ref="{{ hero.mermaidRef }}"></div>
+                            <div style="margin-top:8px; font-size:11px; color:var(--text-light); font-family:ui-monospace,SFMono-Regular,monospace;">Mermaid · child of Card · provenance</div>
+                          </div>
+                        </sc-if>
+                        <div style="margin-top:14px; display:flex; gap:8px; align-items:center;">
+                          <a href="https://example.com" style="{{ ghostLinkStyle }}" onClick="{{ stop }}"><iconify-icon icon="uil:external-link-alt" width="13"></iconify-icon> Original source</a>
+                          <span style="font-size:11.5px; color:var(--text-light);">Aurora shows the digest; the raw article stays external.</span>
+                        </div>
+                      </div>
+                    </sc-if>
+
+                    <div style="display:flex; align-items:center; gap:6px; margin-top:12px; font-size:12px; font-weight:600; color:var(--a-agent-a);">
+                      <iconify-icon icon="{{ hero.toggleIcon }}" width="15"></iconify-icon> {{ hero.toggleLabel }}
+                    </div>
+                  </article>
+                </sc-if>
+
+                <!-- DigestCard variant=rail -->
+                <sc-if value="{{ hasRail }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex; flex-direction:column; gap:10px; min-width:0;">
+                    <div style="font-size:10.5px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--text-light); padding:2px 0 0;">Also today</div>
+                    <sc-for list="{{ rail }}" as="r" hint-placeholder-count="3">
+                      <article style="{{ r.cardStyle }}" style-hover="border-color:var(--a-hair-strong)" onClick="{{ r.onToggle }}">
+                        <div style="display:flex; align-items:center; gap:7px; margin-bottom:7px;">
+                          <span style="{{ r.sourceStyle }}">{{ r.source }}</span>
+                          <span style="{{ r.langStyle }}">{{ r.lang }}</span>
+                          <span style="font-size:11px; color:var(--text-light);">{{ r.minutes }} min</span>
+                          <span style="flex:1;"></span>
+                          <button style="{{ r.idStyle }}" style-hover="border-color:var(--a-hair-strong); color:var(--text)" onClick="{{ r.onCopyId }}">{{ r.id }}</button>
+                        </div>
+                        <div style="font-size:14px; font-weight:600; line-height:1.35; margin-bottom:6px;">{{ r.title }}</div>
+                        <div style="font-size:12.5px; line-height:1.5; color:var(--text-light);">{{ r.sapo }}</div>
+                        <div style="display:flex; gap:7px; align-items:flex-start; margin-top:8px; font-size:12px; line-height:1.5; color:var(--text-body);">
+                          <iconify-icon icon="uil:user-check" width="13" style="color:var(--a-why); flex:none; margin-top:2px;"></iconify-icon>
+                          <span>{{ r.why }}</span>
+                        </div>
+                        <sc-if value="{{ r.expanded }}" hint-placeholder-val="{{ false }}">
+                          <div class="aurora-digest" style="font-size:12.5px; color:var(--text-body); border-top:1px solid var(--border-color); margin-top:10px; padding-top:10px; animation:auroraSlideIn .18s ease-out;">
+                            <sc-for list="{{ r.paras }}" as="pp" hint-placeholder-count="2"><p>{{ pp.t }}</p></sc-for>
+                            <sc-if value="{{ r.hasChart }}" hint-placeholder-val="{{ false }}">
+                              <div style="margin-top:10px; background:var(--elevation0); border:1px solid var(--border-color); border-radius:8px; padding:8px;"><div ref="{{ r.chartRef }}" style="width:100%; height:180px;"></div></div>
+                            </sc-if>
+                            <sc-if value="{{ r.hasMermaid }}" hint-placeholder-val="{{ false }}">
+                              <div style="margin-top:10px; background:var(--elevation0); border:1px solid var(--border-color); border-radius:8px; padding:10px; overflow:auto;"><div class="aurora-mermaid" ref="{{ r.mermaidRef }}"></div></div>
+                            </sc-if>
+                          </div>
+                        </sc-if>
+                        <div style="display:flex; align-items:center; gap:5px; margin-top:9px; font-size:11.5px; font-weight:600; color:var(--a-agent-a);">
+                          <iconify-icon icon="{{ r.toggleIcon }}" width="14"></iconify-icon> {{ r.toggleLabel }}
+                        </div>
+                      </article>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+
+              <!-- SECTIONS: SectionHeader + DigestCard variant=list -->
+              <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="2">
+                <div style="margin-top:30px;">
+                  <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                    <span style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text);">{{ sec.label }}</span>
+                    <span style="flex:1; height:1px; background:var(--a-hair-strong);"></span>
+                    <span style="font-size:11px; color:var(--text-light); font-variant-numeric:tabular-nums;">{{ sec.countLabel }}</span>
+                  </div>
+                  <div style="background:var(--elevation1); border:1px solid var(--border-color); border-radius:12px; overflow:hidden;">
+                    <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="2">
+                      <div style="{{ it.rowStyle }}" style-hover="background:var(--a-hover)" onClick="{{ it.onToggle }}">
+                        <div style="display:flex; align-items:flex-start; gap:12px;">
+                          <iconify-icon icon="{{ it.toggleIcon }}" width="16" style="flex:none; color:var(--text-light); margin-top:2px;"></iconify-icon>
+                          <div style="flex:1; min-width:0;">
+                            <div style="display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;">
+                              <span style="font-size:13.5px; font-weight:600; line-height:1.4;">{{ it.title }}</span>
+                              <span style="font-size:11.5px; color:var(--text-light); white-space:nowrap;">{{ it.source }} · {{ it.lang }} · {{ it.minutes }} min</span>
+                            </div>
+                            <div style="font-size:12.5px; color:var(--text-light); line-height:1.5; margin-top:3px;">{{ it.sapo }}</div>
+                            <sc-if value="{{ it.expanded }}" hint-placeholder-val="{{ false }}">
+                              <div style="animation:auroraSlideIn .18s ease-out;">
+                                <div style="display:flex; gap:8px; align-items:flex-start; margin:10px 0; padding:8px 10px; border-left:3px solid var(--a-why); background:var(--a-why-bg); border-radius:0 6px 6px 0; font-size:12.5px; line-height:1.5; color:var(--text-body);">
+                                  <iconify-icon icon="uil:user-check" width="13" style="color:var(--a-why); flex:none; margin-top:2px;"></iconify-icon><span><span style="font-weight:600; color:var(--a-why);">Why you · </span>{{ it.why }}</span>
+                                </div>
+                                <div class="aurora-digest" style="font-size:13px; color:var(--text-body);">
+                                  <sc-for list="{{ it.paras }}" as="pp" hint-placeholder-count="2"><p>{{ pp.t }}</p></sc-for>
+                                </div>
+                                <sc-if value="{{ it.hasChart }}" hint-placeholder-val="{{ false }}">
+                                  <div style="margin-top:10px; background:var(--elevation0); border:1px solid var(--border-color); border-radius:8px; padding:8px;"><div ref="{{ it.chartRef }}" style="width:100%; height:200px;"></div></div>
+                                </sc-if>
+                                <sc-if value="{{ it.hasMermaid }}" hint-placeholder-val="{{ false }}">
+                                  <div style="margin-top:10px; background:var(--elevation0); border:1px solid var(--border-color); border-radius:8px; padding:12px; overflow:auto;"><div class="aurora-mermaid" ref="{{ it.mermaidRef }}"></div></div>
+                                </sc-if>
+                              </div>
+                            </sc-if>
+                          </div>
+                          <button style="{{ it.idStyle }}" style-hover="border-color:var(--a-hair-strong); color:var(--text)" onClick="{{ it.onCopyId }}">{{ it.id }}</button>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+
+              <!-- ThreadUpdate -->
+              <sc-if value="{{ hasThreads }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:30px;">
+                  <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                    <span style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text);">Tracked threads</span>
+                    <span style="flex:1; height:1px; background:var(--a-hair-strong);"></span>
+                    <span style="font-size:11px; color:var(--text-light);">patched in place across days</span>
+                  </div>
+                  <div style="display:flex; flex-direction:column; gap:10px;">
+                    <sc-for list="{{ threads }}" as="th" hint-placeholder-count="1">
+                      <div style="background:var(--elevation1); border:1px solid var(--border-color); border-left:3px solid var(--a-agent-b); border-radius:12px; padding:14px 16px;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+                          <iconify-icon icon="uil:comments-alt" width="15" style="color:var(--a-agent-b);"></iconify-icon>
+                          <span style="font-size:14px; font-weight:600;">{{ th.title }}</span>
+                          <span style="{{ th.dayStyle }}">{{ th.dayLabel }}</span>
+                          <span style="flex:1;"></span>
+                          <button style="{{ th.idStyle }}" style-hover="border-color:var(--a-hair-strong); color:var(--text)" onClick="{{ th.onCopyId }}">{{ th.id }}</button>
+                        </div>
+                        <div style="font-size:13px; line-height:1.6; color:var(--text-body); margin-bottom:10px;">{{ th.update }}</div>
+                        <div style="display:flex; flex-direction:column; gap:4px; padding-left:10px; border-left:1px dashed var(--a-hair-strong);">
+                          <sc-for list="{{ th.history }}" as="hh" hint-placeholder-count="2">
+                            <div style="display:flex; gap:10px; font-size:12px; color:var(--text-light); line-height:1.5;"><span style="font-family:ui-monospace,SFMono-Regular,monospace; flex:none; width:52px;">{{ hh.when }}</span><span>{{ hh.t }}</span></div>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- SkipList -->
+              <div style="margin-top:30px; border:1px solid var(--border-color); border-radius:12px; background:var(--elevation1);">
+                <button style="{{ skipToggleStyle }}" style-hover="background:var(--a-hover)" onClick="{{ onToggleSkips }}">
+                  <iconify-icon icon="{{ skipIcon }}" width="16" style="color:var(--text-light);"></iconify-icon>
+                  <span style="font-size:13px; font-weight:600;">Skipped {{ skippedCount }}</span>
+                  <span style="font-size:12px; color:var(--text-light);">one-line reasons · collapsed by default</span>
+                  <span style="flex:1;"></span>
+                  <span style="font-size:11.5px; color:var(--a-agent-a); font-weight:600;">{{ skipLabel }}</span>
+                </button>
+                <sc-if value="{{ skipsOpen }}" hint-placeholder-val="{{ false }}">
+                  <div style="border-top:1px solid var(--border-color); padding:6px 16px 10px; animation:auroraSlideIn .18s ease-out;">
+                    <sc-for list="{{ skipped }}" as="sk" hint-placeholder-count="4">
+                      <div style="display:flex; gap:12px; align-items:baseline; padding:7px 0; border-bottom:1px solid var(--a-hair); font-size:12.5px;">
+                        <span style="flex:1; min-width:0; color:var(--text-body); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ sk.title }}</span>
+                        <span style="{{ sk.reasonStyle }}">{{ sk.reason }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+
+              <!-- DoneMarker -->
+              <div style="margin-top:36px; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; padding:26px 20px 8px; border-top:2px solid var(--text);">
+                <iconify-icon icon="uil:check-circle" width="28" style="color:var(--a-live);"></iconify-icon>
+                <div style="font-size:15px; font-weight:700;">{{ doneTitle }}</div>
+                <div style="font-size:12.5px; color:var(--text-light); max-width:460px; line-height:1.55;">{{ doneText }}</div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </main>
+
+    <!-- RIGHT: CHANNEL ARCHIVE (the stack) -->
+    <aside style="width:250px; flex:none; display:flex; flex-direction:column; background:var(--elevation1); border-left:1px solid var(--border-color);">
+      <div style="height:46px; flex:none; display:flex; align-items:center; justify-content:space-between; padding:0 14px; border-bottom:1px solid var(--border-color);">
+        <span style="font-size:10px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--text-light);">Channel stack</span>
+        <span style="font-size:11px; color:var(--text-light); font-variant-numeric:tabular-nums;">{{ archiveCountLabel }}</span>
+      </div>
+      <div style="flex:1; overflow-y:auto; padding:10px;">
+        <sc-for list="{{ archive }}" as="a" hint-placeholder-count="6">
+          <div style="{{ a.style }}" style-hover="border-color:var(--a-hair-strong)" onClick="{{ a.onClick }}">
+            <div style="display:flex; align-items:center; gap:7px;">
+              <iconify-icon icon="{{ a.icon }}" width="14" style="{{ a.iconStyle }}"></iconify-icon>
+              <span style="flex:1; min-width:0; font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ a.title }}</span>
+              <sc-if value="{{ a.live }}" hint-placeholder-val="{{ false }}"><span style="width:6px; height:6px; border-radius:50%; background:var(--a-live);"></span></sc-if>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:5px; padding-left:21px;">
+              <span style="font-size:10.5px; color:var(--text-light);">{{ a.meta }}</span>
+              <span style="font-size:10px; color:var(--text-light); font-family:ui-monospace,SFMono-Regular,monospace;">{{ a.kind }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="flex:none; padding:10px 12px; border-top:1px solid var(--border-color); font-size:11px; color:var(--text-light); line-height:1.5;">
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px; color:var(--text-body);"><iconify-icon icon="uil:history-alt" width="13"></iconify-icon> Retention {{ retentionDays }} days</div>
+        {{ retentionNote }}
+      </div>
+    </aside>
+
+    <!-- PROGRAM DRAWER (OpenUI Lang snapshot) -->
+    <sc-if value="{{ programOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; top:0; right:250px; bottom:0; width:440px; display:flex; flex-direction:column; background:var(--elevation1); border-left:1px solid var(--border-color); box-shadow:-8px 0 24px rgba(0,0,0,.08); animation:auroraDrawer .18s ease-out; z-index:20;">
+        <div style="height:46px; flex:none; display:flex; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid var(--border-color);">
+          <iconify-icon icon="uil:brackets-curly" width="15" style="color:var(--a-agent-a);"></iconify-icon>
+          <span style="font-size:12.5px; font-weight:600;">OpenUI program</span>
+          <span style="font-size:11px; color:var(--text-light); font-family:ui-monospace,SFMono-Regular,monospace;">push_ui · mode=patch</span>
+          <span style="flex:1;"></span>
+          <button style="{{ closeBtnStyle }}" onClick="{{ onToggleProgram }}"><iconify-icon icon="uil:times" width="15"></iconify-icon></button>
+        </div>
+        <div style="flex:none; padding:10px 14px; border-bottom:1px solid var(--border-color); font-size:11.5px; color:var(--text-light); line-height:1.55;">
+          The full-program snapshot the renderer paints from. The agent only speaks in these components; weight, colour and layout are the house theme's job. Patches merge server-side into a new snapshot and the live bus emits it.
+        </div>
+        <div style="flex:1; overflow:auto; padding:12px 14px;">
+          <div class="aurora-prog">
+            <sc-for list="{{ program }}" as="ln" hint-placeholder-count="8">
+              <div style="{{ ln.style }}"><span class="{{ ln.cls }}">{{ ln.text }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:none; display:flex; align-items:center; gap:12px; padding:9px 14px; border-top:1px solid var(--border-color); font-size:11px; color:var(--text-light); font-family:ui-monospace,SFMono-Regular,monospace;">
+          <span>{{ stmtCount }} / 200 statements</span>
+          <span style="width:3px; height:3px; border-radius:50%; background:var(--text-light);"></span>
+          <span>max 10k chars / string</span>
+          <span style="width:3px; height:3px; border-radius:50%; background:var(--text-light);"></span>
+          <span>schema: zod → tool description</span>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- TOAST -->
+  <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; left:50%; bottom:26px; transform:translateX(-50%); display:flex; align-items:center; gap:12px; padding:10px 12px 10px 14px; background:var(--elevation0); border:1px solid var(--a-hair-strong); border-radius:10px; box-shadow:var(--a-lift); animation:auroraToast .18s ease-out; z-index:40;">
+      <span style="width:7px; height:7px; border-radius:50%; background:var(--positive); flex:none;"></span>
+      <span style="font-size:12.5px; color:var(--text);">{{ toastText }}</span>
+      <sc-if value="{{ toastHasAction }}" hint-placeholder-val="{{ false }}">
+        <button style="height:26px; padding:0 10px; border-radius:6px; border:none; background:var(--primary); color:#fff; font-size:12px; font-weight:600; font-family:inherit; cursor:pointer;" onClick="{{ onToastOpen }}">View</button>
+      </sc-if>
+      <button style="width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:6px; border:none; background:transparent; color:var(--text-light); cursor:pointer;" onClick="{{ onToastDismiss }}"><iconify-icon icon="uil:times" width="14"></iconify-icon></button>
+    </div>
+  </sc-if>
+
+  <!-- DEMO CONTROL -->
+  <button style="position:fixed; left:16px; bottom:16px; height:30px; display:flex; align-items:center; gap:7px; padding:0 11px; border-radius:8px; border:1px dashed var(--a-hair-strong); background:var(--a-overlay); color:var(--text-light); font-size:11.5px; font-family:inherit; cursor:pointer; z-index:40;" style-hover="color:var(--text); border-color:var(--text-light)" onClick="{{ onSimulate }}">
+    <iconify-icon icon="uil:bolt" width="14"></iconify-icon> Simulate agent patch
+  </button>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light","tsType":"&#39;light&#39; | &#39;dark&#39;","section":"Appearance"},"startTopic":{"editor":"enum","options":["tech","business","recreation","agents"],"default":"tech","tsType":"&#39;tech&#39; | &#39;business&#39; | &#39;recreation&#39; | &#39;agents&#39;","section":"Demo"},"followLatest":{"editor":"boolean","default":true,"tsType":"boolean","section":"Behavior"},"palette":{"editor":"enum","options":["paper","broadsheet","slate","cobalt"],"default":"cobalt","tsType":"&#39;paper&#39; | &#39;broadsheet&#39; | &#39;slate&#39; | &#39;cobalt&#39;","section":"Appearance"}}'>
+// One channel per topic. Each channel is a kind=channel session with a stable id, pinned, with a retention rule.
+// The briefing is ONE UI artifact per day, patched through the day; the archive is the channel's stack.
+const TOPICS = [
+  { id: 'tech', label: 'Tech', icon: 'uil:processor', channel: 'feed-tech', retention: 30, unreadCount: 3,
+    briefing: {
+      date: 'Wednesday, 4 November 2026', scanned: 142, live: true,
+      patches: [ { time: '06:00', label: 'Morning scan', state: 'done' }, { time: '08:00', label: 'YouTube pass', state: 'done' }, { time: '12:00', label: 'Breaking pass', state: 'running' } ],
+      hero: { id: 'itm-001', title: 'Managed Agents go GA with sandboxed tool runners and per-tenant egress', source: 'The Information', lang: 'EN', minutes: 6,
+        sapo: 'Server-hosted agent loops now ship with an isolated sandbox per session, tenant-scoped network policy and a tool-runner API that replaces hand-rolled orchestration. Pricing is per active session-hour, not per token.',
+        why: 'You run a multi-tenant agent platform; this is the hosted alternative your harness will be compared against in the next planning cycle.',
+        paras: [
+          'The headline change is the execution model: each session gets a fresh container with a declared tool manifest, and the runner enforces the manifest at call time rather than trusting the model. Egress is allow-listed per tenant, which maps cleanly onto the per-venue isolation Oolio already needs.',
+          'The pricing shift to session-hours punishes long idle agents and rewards short, bursty runs — the opposite of the always-on watcher pattern. Worth re-running the cost model for the verification harness before anyone proposes a migration.',
+          'Provenance for this digest: two primary sources (the launch post and the API reference), one secondary (HN thread, 340 comments, mostly on the egress policy).' ],
+        mermaid: 'graph LR\n  A[Launch post] --> D[Digest itm-001]\n  B[API reference] --> D\n  C[HN thread · 340c] -. context .-> D\n  D --> E[Why-you: harness6 memory graph]' },
+      rail: [
+        { id: 'itm-002', title: 'Postgres 18 async I/O: 2.1× on cold-cache scans in the first independent benchmarks', source: 'Hacker News', lang: 'EN', minutes: 4,
+          sapo: 'io_uring-backed reads land by default on Linux; gains concentrate on large sequential scans, negligible on OLTP point reads.',
+          why: 'Your reporting queries are scan-heavy; the OLTP path you care about for POS is untouched.',
+          paras: [ 'The benchmark ran on NVMe with a 64 GB table and a cold page cache; the 2.1× is the best case. Warm-cache numbers are flat, and the author notes a regression on ZFS until the next point release.' ],
+          chart: { kind: 'column', categories: ['Cold seq scan', 'Warm seq scan', 'Point read', 'Index range'], series: [ { name: 'PG 17', data: [100, 100, 100, 100] }, { name: 'PG 18', data: [210, 103, 99, 112] } ] } },
+        { id: 'itm-003', title: 'VNG khánh thành trung tâm dữ liệu AI 30 MW tại Thủ Đức', source: 'VnExpress', lang: 'VI', minutes: 3,
+          sapo: 'Giai đoạn 1 đưa vào vận hành 30 MW, định hướng cho thuê GPU theo giờ cho doanh nghiệp trong nước.',
+          why: 'Local GPU capacity changes the latency and data-residency story for a Vietnam-hosted inference tier.',
+          paras: [ 'Giá thuê chưa công bố; bài viết dẫn lời đại diện VNG rằng mục tiêu là "rẻ hơn 20–30% so với thuê ở Singapore". Đáng theo dõi khi bảng giá ra.' ] },
+        { id: 'itm-004', title: 'Zod 4 codegen: JSON Schema → tool descriptions, with token budgets', source: 'GitHub', lang: 'EN', minutes: 2,
+          sapo: 'A small CLI that renders a Zod schema set into an LLM tool description and fails CI if the output exceeds a token cap.',
+          why: 'Aurora regenerates push_ui from the component library and enforces an 800-token cap; this is the same idea, packaged.',
+          paras: [ 'The interesting part is the budget allocation: it trims descriptions proportionally rather than truncating the last component, which keeps rarely-used components documented.' ] }
+      ],
+      sections: [
+        { label: 'Agent infra', items: [
+          { id: 'itm-005', title: 'MCP spec draft adds resumable streamable sessions', source: 'modelcontextprotocol.io', lang: 'EN', minutes: 3,
+            sapo: 'Clients can reconnect to a session id and replay missed events; servers advertise a replay window.',
+            why: 'Aurora’s live bus already does this ad hoc; aligning with the spec makes the pi client simpler.',
+            paras: [ 'The replay window is advertised in the capabilities handshake. Servers without one keep today’s behaviour, so adoption can be incremental.' ],
+            mermaid: 'sequenceDiagram\n  participant C as Client\n  participant S as Server\n  C->>S: initialize (session_id)\n  S-->>C: capabilities {replay_window: 5m}\n  Note over C,S: connection drops\n  C->>S: resume (session_id, last_event)\n  S-->>C: replay missed events' },
+          { id: 'itm-006', title: 'Orange Pi 5 Ultra NPU driver merged into mainline', source: 'LWN', lang: 'EN', minutes: 2,
+            sapo: 'RKNPU userspace no longer needs the vendor kernel; 6.18 ships it in-tree.',
+            why: 'Your always-on node can move to a mainline kernel without losing NPU access.',
+            paras: [ 'The merge covers the compute path only; the hardware JPEG encoder is still vendor-only.' ] }
+        ] },
+        { label: 'Dev tooling', items: [
+          { id: 'itm-007', title: 'Bun 1.3 ships a built-in test sharding scheduler', source: 'bun.sh', lang: 'EN', minutes: 2,
+            sapo: 'Shards by historical duration rather than file count; CI runs reportedly 30% shorter on uneven suites.',
+            why: 'Your verification harness has a long tail of slow agent-driven tests — exactly the uneven case.',
+            paras: [ 'Durations are cached in a JSON file you commit; first run is still naive.' ] },
+          { id: 'itm-008', title: 'Playwright adds `expect(page).toMatchAriaSnapshot` diffs in trace viewer', source: 'YouTube · Playwright channel', lang: 'EN', minutes: 4,
+            sapo: 'Accessibility-tree snapshots now diff inline in the trace, with the failing node highlighted.',
+            why: 'You asked for agent UI tests that don’t depend on pixels; aria snapshots are the stable layer.',
+            paras: [ 'From the 08:00 YouTube pass. Transcript extracted; the demo is at 12:40 in the video.' ] }
+        ] }
+      ],
+      threads: [
+        { id: 'thr-neo4j', title: 'Graph memory for agents', dayLabel: 'Day 3', update: 'Neo4j published the community benchmark you were waiting for: 50k-node principle graphs answer 3-hop queries in 18 ms p95 on a single core. That removes the main objection to a graph-backed memory plane; the open question is now write amplification on nightly re-indexing.',
+          history: [ { when: 'Mon 2', t: 'Thread opened from itm-311: Neo4j announces agent-memory benchmark suite.' }, { when: 'Tue 3', t: 'Two competing results (LadybugDB, Kùzu) — numbers not comparable, different query shapes.' } ] }
+      ],
+      skipped: [
+        { title: 'Managed Agents launch coverage (TechCrunch)', reason: 'duplicate of itm-001' },
+        { title: '“10 AI tools every dev needs in 2027”', reason: 'listicle, low signal' },
+        { title: 'Rust 1.92 release notes', reason: 'already read 2 Nov' },
+        { title: 'Gartner agentic-AI magic quadrant', reason: 'paywalled, no study note' },
+        { title: 'Masan Q3 results', reason: 'routed to feed-business' },
+        { title: '7 more', reason: 'below threshold' }
+      ],
+      skippedCount: 12,
+      done: 'You’re done with Tech.', doneNote: '9 kept of 142 scanned. The 12:00 breaking pass is still running — anything new slides in above the sections without reordering what you’ve read.'
+    },
+    archive: [ { title: 'Tue 3 Nov', meta: '7 kept · 3 patches', kind: 'ui' }, { title: 'Mon 2 Nov', meta: '11 kept · 3 patches', kind: 'ui' }, { title: 'Sun 1 Nov', meta: '4 kept · 1 patch', kind: 'ui' }, { title: 'Sat 31 Oct', meta: '6 kept · 2 patches', kind: 'ui' } ],
+    archiveTotal: 23
+  },
+
+  { id: 'business', label: 'Business', icon: 'uil:chart-growth', channel: 'feed-business', retention: 30, unreadCount: 1,
+    briefing: {
+      date: 'Wednesday, 4 November 2026', scanned: 96, live: true,
+      patches: [ { time: '06:00', label: 'Morning scan', state: 'done' }, { time: '09:30', label: 'Markets open', state: 'done' }, { time: '12:00', label: 'Breaking pass', state: 'running' } ],
+      hero: { id: 'itm-101', title: 'F&B chains in HCMC shift to delivery-first: dine-in share drops below half for the first time', source: 'Bloomberg', lang: 'EN', minutes: 5, expanded: true,
+        sapo: 'Q3 channel data from four listed operators shows delivery and pickup at 52% of orders, up from 41% a year ago. Kiosk ordering grew fastest from a small base.',
+        why: 'Oolio’s POS roadmap is weighted toward dine-in flows; this is the clearest signal yet that the mix is moving.',
+        paras: [ 'Margins tell the other half of the story: delivery orders carry 18–22% platform fees, so revenue share rose faster than profit share. Operators are pushing first-party ordering to claw that back — which is a POS integration question, not a marketing one.' ],
+        chart: { kind: 'column', categories: ['Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026', 'Q3 2026'], series: [ { name: 'Dine-in', data: [59, 56, 54, 51, 48] }, { name: 'Delivery', data: [33, 35, 36, 38, 40] }, { name: 'Kiosk / pickup', data: [8, 9, 10, 11, 12] } ] } },
+      rail: [
+        { id: 'itm-102', title: 'GrabFood trims merchant commission by 3 points in HCMC and Hanoi', source: 'VnExpress', lang: 'VI', minutes: 3,
+          sapo: 'Áp dụng từ 1/12 cho nhà hàng có doanh thu dưới ngưỡng; phần còn lại giữ nguyên.',
+          why: 'Changes the economics behind itm-101 for the small merchants your customers resemble.',
+          paras: [ 'Ngưỡng doanh thu chưa công bố chính thức; hai nguồn nói khoảng 200 triệu/tháng.' ] },
+        { id: 'itm-103', title: 'RBA holds; AUD softens against VND', source: 'AFR', lang: 'EN', minutes: 2,
+          sapo: 'Rate held as expected; the statement leans dovish. Modest AUD weakness on the day.',
+          why: 'Oolio’s AU revenue converts to VND payroll; a persistent move changes the hedging math.',
+          paras: [ 'Nothing actionable today; added to the FX thread for weekly tracking.' ] }
+      ],
+      sections: [
+        { label: 'POS & payments', items: [
+          { id: 'itm-104', title: 'NAPAS rolls VietQR 2.0 with dynamic amounts to all member banks', source: 'NAPAS', lang: 'VI', minutes: 3,
+            sapo: 'Mã QR động theo từng hoá đơn, hoàn tất chuẩn hoá cho merchant lớn.',
+            why: 'Direct impact on the Vietnam payments integration backlog.',
+            paras: [ 'Spec is public; sandbox opens to PSPs this month.' ] },
+          { id: 'itm-105', title: 'Square raises per-transaction fee for international cards', source: 'Square', lang: 'EN', minutes: 2,
+            sapo: '+0.4 points on non-domestic cards, effective January.',
+            why: 'Pricing benchmark for the AU market.',
+            paras: [ 'Applies to card-present and online alike.' ] }
+        ] },
+        { label: 'Markets', items: [
+          { id: 'itm-106', title: 'VN-Index closes above the psychological line on bank earnings', source: 'VnExpress', lang: 'VI', minutes: 2,
+            sapo: 'Thanh khoản tăng mạnh, nhóm ngân hàng dẫn dắt.',
+            why: 'Macro context for the Vietnam expansion thread.',
+            paras: [ 'Context only; no action.' ] }
+        ] }
+      ],
+      threads: [
+        { id: 'thr-competitors', title: 'Competitor pricing watch', dayLabel: 'Day 12', update: 'Square’s international-card increase (itm-105) is the second fee move this quarter after Lightspeed’s bundle repricing. Your AU pricing page is now the cheapest of the three on international cards, by a margin that is probably not intentional.',
+          history: [ { when: 'Oct 24', t: 'Thread opened: Lightspeed reprices Essentials bundle.' }, { when: 'Oct 30', t: 'No change. Toast AU page unchanged for 40 days.' } ] }
+      ],
+      skipped: [
+        { title: 'Masan Q3 earnings call transcript', reason: 'covered in itm-101 context' },
+        { title: 'Crypto ETF inflows', reason: 'off-topic for this channel' },
+        { title: 'Shopee seller fee rumours', reason: 'single unverified source' },
+        { title: '28 more', reason: 'below threshold' }
+      ],
+      skippedCount: 31,
+      done: 'You’re done with Business.', doneNote: '7 kept of 96 scanned. Markets pass added nothing you need to act on before the breaking pass.'
+    },
+    archive: [ { title: 'Tue 3 Nov', meta: '5 kept · 3 patches', kind: 'ui' }, { title: 'Mon 2 Nov', meta: '8 kept · 3 patches', kind: 'ui' }, { title: 'Fri 31 Oct', meta: '6 kept · 2 patches', kind: 'ui' } ],
+    archiveTotal: 30
+  },
+
+  { id: 'recreation', label: 'Recreation', icon: 'uil:mountains-sun', channel: 'feed-recreation', retention: 14, unreadCount: 0,
+    briefing: {
+      date: 'Wednesday, 4 November 2026', scanned: 28, live: false,
+      patches: [ { time: '06:00', label: 'Morning scan', state: 'done' }, { time: '08:00', label: 'YouTube pass', state: 'done' } ],
+      hero: { id: 'itm-201', title: 'New protected bike lane opens along QL1K — the Dĩ An → Thủ Đức loop is finally rideable at rush hour', source: 'Strava Local · Tuổi Trẻ', lang: 'VI', minutes: 3,
+        sapo: '4.2 km of kerb-separated lane between the Sóng Thần junction and the Thủ Đức market. Club rides are already re-routing the Sunday 60 km loop through it.',
+        why: 'It starts 2 km from Bcons City and removes the one section of your usual loop you kept avoiding.',
+        paras: [ 'Lane is two-way on the northern side; the southbound crossing at Sóng Thần still has no signal phase for bikes, so the club route takes the underpass. GPX attached in the Strava club post.' ],
+        mermaid: 'graph LR\n  A[Bcons City] --> B[Sóng Thần jn]\n  B -- new lane 4.2km --> C[Thủ Đức market]\n  C --> D[Riverside path]\n  D --> A' },
+      rail: [],
+      sections: [
+        { label: 'Film & music', items: [
+          { id: 'itm-202', title: 'HCMC Vietnamese Film Week lineup announced — 14 features, three premieres', source: 'VnExpress', lang: 'VI', minutes: 2,
+            sapo: 'Diễn ra 15–21/11 tại Galaxy Nguyễn Du; vé mở bán thứ Sáu.',
+            why: 'You flagged Vietnamese cinema as a thread to keep warm.',
+            paras: [ 'Hai suất chiếu có phụ đề tiếng Anh; danh sách đầy đủ trong bài.' ] },
+          { id: 'itm-203', title: 'Long-form: how a bedroom producer in Đà Lạt built a label on Bandcamp', source: 'YouTube · Nhạc Underground', lang: 'VI', minutes: 9,
+            sapo: 'Một giờ phỏng vấn; phần hay nhất là 20 phút về cách chia doanh thu.',
+            why: 'Matches your saved interest in independent Vietnamese music.',
+            paras: [ 'From the 08:00 YouTube pass; transcript extracted and the digest covers minutes 12–32.' ] }
+        ] }
+      ],
+      threads: [],
+      skipped: [
+        { title: 'Tour de France route reveal', reason: 'not local, low relevance' },
+        { title: 'Streaming price hikes roundup', reason: 'already read' },
+        { title: '2 more', reason: 'below threshold' }
+      ],
+      skippedCount: 4,
+      done: 'Slow day — you’re done.', doneNote: '3 kept of 28 scanned. The agent chose hero-only today; no rail because nothing else cleared the bar.'
+    },
+    archive: [ { title: 'Tue 3 Nov', meta: '2 kept · 2 patches', kind: 'ui' }, { title: 'Sun 1 Nov', meta: '6 kept · 2 patches', kind: 'ui' } ],
+    archiveTotal: 11
+  },
+
+  { id: 'agents', label: 'Agent infra', icon: 'uil:robot', channel: 'feed-agent-infra', retention: 30, unreadCount: 0,
+    briefing: {
+      date: 'Wednesday, 4 November 2026', scanned: 64, live: true,
+      patches: [ { time: '06:00', label: 'Morning scan', state: 'done' }, { time: '12:00', label: 'Breaking pass', state: 'queued' } ],
+      hero: { id: 'itm-301', title: 'Durable execution for agent loops: three frameworks converge on the same checkpoint API', source: 'arXiv · engineering blogs', lang: 'EN', minutes: 7,
+        sapo: 'Temporal-style checkpoints after every tool call, replayable from any step, are now the default in three independent runtimes. The remaining disagreement is who owns the side-effect ledger.',
+        why: 'Your harness replays failed agent runs from scratch; a checkpoint-replay model would cut verification time on long runs.',
+        paras: [ 'All three store the model’s message history as the checkpoint, which is cheap but makes the replay sensitive to prompt drift. One of them hashes the tool manifest into the checkpoint so a changed tool invalidates the replay — that is the detail worth copying.' ] },
+      rail: [
+        { id: 'itm-302', title: 'Evaluation harness for multi-agent handoffs open-sourced', source: 'GitHub', lang: 'EN', minutes: 3,
+          sapo: 'Scores each handoff on context loss rather than final-answer correctness.',
+          why: 'Your team of five plus agents is exactly the handoff-heavy setup this measures.',
+          paras: [ 'Context loss is measured as the fraction of required facts absent from the receiving agent’s first turn.' ] },
+        { id: 'itm-303', title: 'Tailscale adds per-node ACL for MCP endpoints', source: 'Tailscale blog', lang: 'EN', minutes: 2,
+          sapo: 'Grant rules can now match MCP server names, not only ports.',
+          why: 'Aurora is tailnet-only; this is the clean way to expose it to one agent host.',
+          paras: [ 'Requires the latest client on both ends.' ] }
+      ],
+      sections: [
+        { label: 'Harness', items: [
+          { id: 'itm-304', title: 'Flaky-test triage with agent-written repro scripts — a six-month retrospective', source: 'Engineering blog', lang: 'EN', minutes: 5,
+            sapo: 'Agents wrote repro scripts for 71% of flaky tests; humans still decided the fix.',
+            why: 'Direct input for the harness6 verification design.',
+            paras: [ 'The failure mode was agents “fixing” flakiness by widening timeouts; the team added a rule that repro scripts cannot edit test code.' ] }
+        ] }
+      ],
+      threads: [
+        { id: 'thr-principle-graph', title: 'Structural memory for agents', dayLabel: 'Day 6', update: 'Two new papers this week treat long-term agent memory as a typed graph rather than a vector store; both report better recall on multi-hop questions and worse on fuzzy ones. Neither addresses write-time validation, which stays your open question.',
+          history: [ { when: 'Oct 30', t: 'Thread opened from itm-287.' }, { when: 'Nov 2', t: 'Added benchmark comparison from feed-tech thr-neo4j.' } ] }
+      ],
+      skipped: [
+        { title: '“Agents will replace developers” op-ed', reason: 'opinion, no data' },
+        { title: 'LangChain release notes', reason: 'already read' },
+        { title: '6 more', reason: 'below threshold' }
+      ],
+      skippedCount: 8,
+      done: 'You’re done with Agent infra.', doneNote: '5 kept of 64 scanned. The breaking pass is queued for 12:00.'
+    },
+    archive: [ { title: 'Tue 3 Nov', meta: '4 kept · 2 patches', kind: 'ui' }, { title: 'Mon 2 Nov', meta: '6 kept · 2 patches', kind: 'ui' } ],
+    archiveTotal: 9
+  }
+];
+
+const PATCH_PUSHES = [
+  { id: 'itm-009', title: 'Breaking: Cloudflare Workers AI adds session-pinned sandboxes', source: 'Cloudflare', lang: 'EN', minutes: 2,
+    sapo: 'Same model as itm-001, priced per request instead of per session-hour.',
+    why: 'Second data point for the hosted-vs-harness comparison in one morning.',
+    paras: [ 'Landed in the 12:00 breaking pass; the agent placed it in the first section rather than the rail to keep what you’ve read in place.' ] },
+  { id: 'itm-010', title: 'Breaking: Vietnam fintech sandbox decree signed', source: 'VnExpress', lang: 'VI', minutes: 3,
+    sapo: 'Nghị định cho phép thử nghiệm có kiểm soát trong 2 năm với PSP và cho vay ngang hàng.',
+    why: 'Unblocks the Vietnam payments thread.',
+    paras: [ 'Có hiệu lực từ 1/1; danh mục lĩnh vực thử nghiệm ở Điều 5.' ] }
+];
+
+// Light-theme palette spikes. Each overrides the house tokens on the root element only; dark theme is untouched.
+const PALETTES = {
+  paper: { label: 'Paper', bg: '#ffffff', swatch: '#673ab6', chart: ['#673ab6', '#3e82f0', '#00acc1', '#ffa000', '#43a047', '#e53935'], vars: '' },
+  broadsheet: { label: 'Broadsheet', bg: '#ffffff', swatch: '#c62828', chart: ['#c62828', '#1a237e', '#2e7d32', '#f9a825', '#6a1b9a', '#00838f'],
+    vars: '--elevation0:#ffffff; --elevation1:#f7f7f5; --elevation2:#efefec; --elevation3:#e2e2de; --text:#111111; --text-body:#2b2b2b; --text-light:#6b6b6b; --border-color:#dcdcd8; --primary:#c62828; --primaryD:#b71c1c; --a-hair:#e6e6e2; --a-hair-strong:#c9c9c4; --a-hover:rgba(0,0,0,.045); --a-code:#f1f1ee; --a-sel:rgba(198,40,40,.07); --a-sel-strong:rgba(198,40,40,.12); --a-sel-line:rgba(198,40,40,.55); --a-live:#2e7d32; --a-live-bg:rgba(46,125,50,.12); --a-warn:#e65100; --a-warn-bg:rgba(230,81,0,.10); --a-info:#1a237e; --a-info-bg:rgba(26,35,126,.09); --a-agent-a:#c62828; --a-agent-b:#1a237e; --a-why:#b71c1c; --a-why-bg:rgba(183,28,28,.06); --a-prog-key:#b71c1c; --a-prog-str:#1a237e; --a-prog-num:#e65100; --a-prog-id:#2e7d32; --a-overlay:rgba(255,255,255,.86);' },
+  cobalt: { label: 'Cobalt & tangerine', bg: '#f3f6ff', swatch: '#1e40af', chart: ['#1e40af', '#ea580c', '#0891b2', '#ca8a04', '#9333ea', '#dc2626'],
+    vars: '--elevation0:#ffffff; --elevation1:#f3f6ff; --elevation2:#e8edfb; --elevation3:#d6ddf3; --text:#0b1b3f; --text-body:#243458; --text-light:#5f6b8a; --border-color:#dbe2f3; --primary:#1e40af; --primaryD:#1e3a8a; --positive:#15803d; --a-hair:#e4e9f6; --a-hair-strong:#c3cdea; --a-hover:rgba(30,64,175,.05); --a-code:#eef2fc; --a-sel:rgba(30,64,175,.08); --a-sel-strong:rgba(30,64,175,.13); --a-sel-line:rgba(30,64,175,.55); --a-live:#15803d; --a-live-bg:rgba(21,128,61,.12); --a-warn:#d97706; --a-warn-bg:rgba(217,119,6,.10); --a-info:#ea580c; --a-info-bg:rgba(234,88,12,.10); --a-agent-a:#1e40af; --a-agent-b:#ea580c; --a-why:#1e40af; --a-why-bg:rgba(30,64,175,.07); --a-prog-key:#1e40af; --a-prog-str:#ea580c; --a-prog-num:#ca8a04; --a-prog-id:#0891b2; --a-overlay:rgba(255,255,255,.86);' },
+  slate: { label: 'Slate & coral', bg: '#eef1f5', swatch: '#e0523f', chart: ['#e0523f', '#334e68', '#0e9f8a', '#eab308', '#7c3aed', '#64748b'],
+    vars: '--elevation0:#f6f8fb; --elevation1:#eef1f5; --elevation2:#e3e8ee; --elevation3:#cfd7e1; --text:#0f172a; --text-body:#27364a; --text-light:#64748b; --border-color:#d9e0e8; --primary:#e0523f; --primaryD:#c2410c; --a-hair:#e2e8f0; --a-hair-strong:#c0cbd8; --a-hover:rgba(15,23,42,.05); --a-code:#e7ecf2; --a-sel:rgba(224,82,63,.08); --a-sel-strong:rgba(224,82,63,.13); --a-sel-line:rgba(224,82,63,.55); --a-live:#15803d; --a-live-bg:rgba(21,128,61,.12); --a-warn:#c2410c; --a-warn-bg:rgba(194,65,12,.10); --a-info:#334e68; --a-info-bg:rgba(51,78,104,.10); --a-agent-a:#e0523f; --a-agent-b:#334e68; --a-why:#c2410c; --a-why-bg:rgba(194,65,12,.07); --a-prog-key:#c2410c; --a-prog-str:#334e68; --a-prog-num:#e0523f; --a-prog-id:#0e9f8a; --a-overlay:rgba(246,248,251,.86);' }
+};
+const PALETTE_ORDER = ['paper', 'broadsheet', 'slate', 'cobalt'];
+const THEMES = {
+  light: { axis: '#808080', label: '#333333', grid: '#ececec', axisLine: '#d9d9d9', tipBg: '#ffffff', tipBorder: '#e5e5e5', tipText: '#222222',
+    mermaid: { theme: 'base', vars: { background: '#fafafa', primaryColor: '#efe8fb', primaryBorderColor: '#673ab6', primaryTextColor: '#222222', secondaryColor: '#e7f0fd', tertiaryColor: '#f7f7f7', mainBkg: '#efe8fb', nodeBorder: '#673ab6', nodeTextColor: '#222222', titleColor: '#222222', textColor: '#222222', lineColor: '#8a8a8a', edgeLabelBackground: '#fafafa', tertiaryTextColor: '#333333', clusterBkg: '#f7f7f7', clusterBorder: '#d9d9d9', actorBkg: '#efe8fb', actorBorder: '#673ab6', signalColor: '#333333', noteBkgColor: '#fff3e0', noteBorderColor: '#ffb74d' } }, chipAlpha: '1a' },
+  dark: { axis: '#808080', label: '#b0b0b0', grid: '#2e2e2e', axisLine: '#3a3a3a', tipBg: '#2a2a2a', tipBorder: '#3a3a3a', tipText: '#e8e8e8',
+    mermaid: { theme: 'base', vars: { background: '#1e1e1e', primaryColor: '#2b2141', primaryBorderColor: '#7e57c2', primaryTextColor: '#e8e8e8', secondaryColor: '#1f2b3d', tertiaryColor: '#242424', mainBkg: '#2b2141', nodeBorder: '#7e57c2', nodeTextColor: '#e8e8e8', titleColor: '#e8e8e8', textColor: '#e8e8e8', lineColor: '#8a8a8a', edgeLabelBackground: '#1e1e1e', tertiaryTextColor: '#b0b0b0', clusterBkg: '#242424', clusterBorder: '#3a3a3a', actorBkg: '#2b2141', actorBorder: '#7e57c2', signalColor: '#e8e8e8', noteBkgColor: '#3a2f1e', noteBorderColor: '#ffb74d' } }, chipAlpha: '22' }
+};
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const data = JSON.parse(JSON.stringify(TOPICS));
+    const start = Math.max(0, data.findIndex(t => t.id === props.startTopic));
+    const expanded = {};
+    data.forEach(t => { if (t.briefing.hero && t.briefing.hero.expanded) expanded[t.briefing.hero.id] = true; });
+    this.state = {
+      topicIdx: start < 0 ? 0 : start, data, expanded,
+      archiveIdx: -1, skipsOpen: false, programOpen: false,
+      follow: props.followLatest !== false,
+      theme: props.theme === 'dark' ? 'dark' : 'light',
+      palette: PALETTES[props.palette] ? props.palette : 'cobalt',
+      toast: null, copied: null, pushCount: 0, flashId: null
+    };
+    this.refs_ = {}; this.charts = {}; this.mermaidDone = {};
+  }
+
+  refFor(key) { if (!this.refs_[key]) this.refs_[key] = React.createRef(); return this.refs_[key]; }
+  topic() { return this.state.data[this.state.topicIdx]; }
+  allItems(b) { const out = []; if (b.hero) out.push(b.hero); b.rail.forEach(r => out.push(r)); b.sections.forEach(s => s.items.forEach(i => out.push(i))); return out; }
+
+  componentDidMount() { this.paint(); }
+  componentDidUpdate() { this.paint(); }
+  componentWillUnmount() { Object.keys(this.charts).forEach(k => this.charts[k].dispose()); this.charts = {}; }
+
+  paint() {
+    const b = this.topic().briefing;
+    const visible = {};
+    if (this.state.archiveIdx < 0) {
+      this.allItems(b).forEach(it => {
+        if (!this.state.expanded[it.id]) return;
+        if (it.chart) { visible['c:' + it.id] = true; this.paintChart(it); }
+        if (it.mermaid) { visible['m:' + it.id] = true; this.paintMermaid(it); }
+      });
+    }
+    Object.keys(this.charts).forEach(k => { if (!visible[k]) { this.charts[k].dispose(); delete this.charts[k]; } });
+    Object.keys(this.mermaidDone).forEach(k => { if (!visible[k]) delete this.mermaidDone[k]; });
+  }
+
+  paintChart(it, tries) {
+    const el = this.refFor('c:' + it.id).current;
+    if (!el) return;
+    if (!window.echarts) { if ((tries || 0) > 40) return; setTimeout(() => this.paintChart(it, (tries || 0) + 1), 150); return; }
+    const key = 'c:' + it.id;
+    const want = it.id + '|' + this.state.theme + '|' + this.state.palette;
+    let ch = this.charts[key];
+    if (!ch || ch.getDom() !== el || ch._auroraKey !== want) {
+      if (ch) ch.dispose();
+      ch = window.echarts.init(el, null, { renderer: 'canvas' });
+      ch._auroraKey = want;
+      ch.setOption(this.option(it.chart), true);
+      this.charts[key] = ch;
+      if (!this._resizeBound) { this._resizeBound = () => Object.keys(this.charts).forEach(k => this.charts[k].resize()); window.addEventListener('resize', this._resizeBound); }
+    }
+    ch.resize();
+  }
+
+  option(c) {
+    const T = THEMES[this.state.theme];
+    const colors = this.state.theme === 'light' ? PALETTES[this.state.palette].chart : PALETTES.paper.chart;
+    const base = { animation: false, color: colors, backgroundColor: 'transparent', textStyle: { fontFamily: 'Inter, sans-serif', color: T.label, fontSize: 11 },
+      grid: { left: 40, right: 12, top: 34, bottom: 28, containLabel: true },
+      tooltip: { trigger: 'axis', backgroundColor: T.tipBg, borderColor: T.tipBorder, textStyle: { color: T.tipText, fontSize: 12 } },
+      legend: { top: 2, right: 2, icon: 'roundRect', itemWidth: 9, itemHeight: 9, textStyle: { color: T.axis, fontSize: 11 } } };
+    const cat = { type: 'category', data: c.categories, axisLine: { lineStyle: { color: T.axisLine } }, axisTick: { show: false }, axisLabel: { color: T.axis, fontSize: 10.5 } };
+    const val = { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: T.grid } }, axisLabel: { color: T.axis, fontSize: 10.5 } };
+    if (c.kind === 'line' || c.kind === 'area') {
+      return Object.assign({}, base, { xAxis: Object.assign({}, cat, { boundaryGap: false }), yAxis: val,
+        series: c.series.map(s => ({ name: s.name, type: 'line', smooth: true, data: s.data, symbolSize: 5, lineStyle: { width: 2.5 }, areaStyle: c.kind === 'area' ? { opacity: 0.18 } : undefined })) });
+    }
+    return Object.assign({}, base, { xAxis: cat, yAxis: val,
+      series: c.series.map(s => ({ name: s.name, type: 'bar', data: s.data, barMaxWidth: 22, itemStyle: { borderRadius: [4, 4, 0, 0] } })) });
+  }
+
+  paintMermaid(it, tries) {
+    const el = this.refFor('m:' + it.id).current;
+    if (!el) return;
+    if (!window.mermaid) { if ((tries || 0) > 40) return; setTimeout(() => this.paintMermaid(it, (tries || 0) + 1), 150); return; }
+    const key = 'm:' + it.id, want = it.id + '|' + this.state.theme;
+    if (this.mermaidDone[key] === want && el.childNodes.length) return;
+    this.mermaidDone[key] = want;
+    const mv = THEMES[this.state.theme].mermaid;
+    if (this._mermaidInit !== this.state.theme) {
+      window.mermaid.initialize({ startOnLoad: false, theme: mv.theme, securityLevel: 'loose', fontFamily: 'Inter, sans-serif', themeVariables: mv.vars });
+      this._mermaidInit = this.state.theme;
+    }
+    window.mermaid.render('aurora-feed-' + it.id.replace(/[^a-z0-9]/gi, '') + '-' + Date.now(), it.mermaid)
+      .then(r => { const host = this.refFor(key).current; if (host) host.innerHTML = r.svg; })
+      .catch(() => {});
+  }
+
+  toggle(id) { const e = Object.assign({}, this.state.expanded); if (e[id]) delete e[id]; else e[id] = true; this.setState({ expanded: e }); }
+
+  copy(key, toastText) {
+    this.setState({ copied: key, toast: toastText ? { text: toastText } : this.state.toast });
+    clearTimeout(this._copyT);
+    this._copyT = setTimeout(() => this.setState({ copied: null, toast: toastText ? null : this.state.toast }), 1600);
+  }
+
+  simulate() {
+    const n = this.state.pushCount + 1;
+    const d = JSON.parse(JSON.stringify(this.state.data));
+    const t = d[this.state.topicIdx];
+    const p = JSON.parse(JSON.stringify(PATCH_PUSHES[n % PATCH_PUSHES.length]));
+    p.id = p.id.replace(/\d+$/, m => String(Number(m) + n).padStart(3, '0'));
+    if (!t.briefing.sections.length) t.briefing.sections.push({ label: 'Breaking', items: [] });
+    t.briefing.sections[0].items.unshift(p);
+    t.briefing.scanned += 7;
+    t.briefing.live = true;
+    const running = t.briefing.patches.find(x => x.state !== 'done');
+    if (running) running.state = 'done';
+    t.briefing.patches.push({ time: '12:' + String(30 + n).padStart(2, '0'), label: 'Patch #' + n, state: 'running' });
+    const next = { data: d, pushCount: n, flashId: p.id, archiveIdx: 0 - 1 };
+    if (this.state.follow) next.toast = { text: 'Patch merged into ' + t.channel + ' · +1 DigestCard' };
+    else { t.unreadCount = (t.unreadCount || 0) + 1; next.toast = { text: 'New patch in ' + t.channel, topic: this.state.topicIdx }; }
+    this.setState(next);
+  }
+
+  programFor(t) {
+    const b = t.briefing;
+    const q = s => '"' + String(s).replace(/"/g, '\\"') + '"';
+    const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+    const lines = [];
+    const push = (text, cls) => lines.push({ text, cls: cls || '', style: 'padding:1px 0;' });
+    push('// ' + t.channel + ' · ' + b.date + ' · snapshot after ' + b.patches.filter(p => p.state === 'done').length + ' patches', 'c');
+    push('BriefingHeader#hdr { date: ' + q(b.date) + ', scanned: ' + b.scanned + ', kept: ' + this.allItems(b).length + ', live: ' + b.live + ' }');
+    const card = (it, variant) => {
+      const kids = [];
+      if (it.chart) kids.push('Chart#' + it.id + '-chart');
+      if (it.mermaid) kids.push('Mermaid#' + it.id + '-prov');
+      push('DigestCard#' + it.id + ' { variant: ' + q(variant) + ', title: ' + q(trunc(it.title, 48)) + ', source: ' + q(it.source) + ', lang: ' + q(it.lang.toLowerCase()) + ', minutes: ' + it.minutes + ', sapo: ' + q(trunc(it.sapo, 40)) + ', why: ' + q(trunc(it.why, 40)) + (kids.length ? ', children: [' + kids.join(', ') + ']' : '') + ' }');
+      if (it.chart) push('Chart#' + it.id + '-chart { chart_type: ' + q(it.chart.kind) + ', categories: [' + it.chart.categories.length + '], series: [' + it.chart.series.length + '] }', 'c');
+      if (it.mermaid) push('Mermaid#' + it.id + '-prov { code: ' + q(trunc(it.mermaid.split('\n')[0], 28)) + ' }', 'c');
+    };
+    if (b.hero) card(b.hero, 'hero');
+    b.rail.forEach(r => card(r, 'rail'));
+    b.sections.forEach((s, i) => { push('SectionHeader#sec-' + (i + 1) + ' { label: ' + q(s.label) + ' }'); s.items.forEach(it => card(it, 'list')); });
+    b.threads.forEach(th => push('ThreadUpdate#' + th.id + ' { thread_id: ' + q(th.id) + ', title: ' + q(th.title) + ', day: ' + q(th.dayLabel) + ', update: ' + q(trunc(th.update, 40)) + ' }'));
+    push('SkipList#skips { count: ' + b.skippedCount + ', items: [' + b.skipped.length + ' × { title, reason }] }');
+    push('DoneMarker#done { text: ' + q(b.done) + ' }');
+    const kids = ['hdr'];
+    if (b.hero) kids.push(b.hero.id);
+    b.rail.forEach(r => kids.push(r.id));
+    b.sections.forEach((s, i) => { kids.push('sec-' + (i + 1)); s.items.forEach(it => kids.push(it.id)); });
+    b.threads.forEach(th => kids.push(th.id));
+    kids.push('skips', 'done');
+    push('Stack#root { direction: "column", children: [' + kids.join(', ') + '] }', 'k');
+    return lines;
+  }
+
+  renderVals() {
+    const st = this.state;
+    const T = THEMES[st.theme];
+    const t = this.topic();
+    const b = t.briefing;
+    const mono = 'font-family:ui-monospace,SFMono-Regular,monospace;';
+    const ghostBtn = 'flex:none; height:32px; display:flex; align-items:center; gap:6px; padding:0 11px; border-radius:7px; border:1px solid var(--border-color); background:var(--elevation0); color:var(--text-body); font-size:12px; font-weight:500; font-family:inherit; cursor:pointer; text-decoration:none;';
+    const themeBtn = on => 'width:30px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:6px; border:none; cursor:pointer; background:' + (on ? 'var(--a-sel-strong)' : 'transparent') + '; color:' + (on ? 'var(--text)' : 'var(--text-light)') + ';';
+    const idStyle = 'flex:none; height:20px; padding:0 7px; border-radius:5px; border:1px solid var(--border-color); background:var(--elevation0); color:var(--text-light); font-size:10.5px; cursor:pointer; ' + mono;
+    const sourceStyle = 'display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:5px; background:var(--a-info-bg); color:var(--a-info); font-size:11px; font-weight:600; white-space:nowrap;';
+    const langStyle = 'display:inline-flex; align-items:center; height:20px; padding:0 6px; border-radius:5px; border:1px solid var(--border-color); color:var(--text-light); font-size:10px; font-weight:700; letter-spacing:.06em;';
+    const stop = e => e.stopPropagation();
+
+    const deco = (it, variant) => {
+      const expanded = !!st.expanded[it.id];
+      const base = variant === 'hero'
+        ? 'min-width:0; background:var(--elevation1); border:1px solid var(--border-color); border-radius:14px; padding:22px 24px; cursor:pointer; transition:border-color .1s, box-shadow .1s;'
+        : variant === 'rail'
+          ? 'min-width:0; background:var(--elevation1); border:1px solid var(--border-color); border-radius:12px; padding:13px 14px; cursor:pointer; transition:border-color .1s;'
+          : 'padding:12px 16px; border-bottom:1px solid var(--a-hair); cursor:pointer;' + (st.flashId === it.id ? ' animation:auroraFlash 1.6s ease-out;' : '');
+      return Object.assign({}, it, {
+        expanded, paras: (it.paras || []).map(p => ({ t: p })),
+        hasChart: !!it.chart, hasMermaid: !!it.mermaid,
+        chartRef: this.refFor('c:' + it.id), mermaidRef: this.refFor('m:' + it.id),
+        cardStyle: base, rowStyle: base, idStyle, sourceStyle, langStyle,
+        toggleIcon: variant === 'list' ? (expanded ? 'uil:angle-down' : 'uil:angle-right') : (expanded ? 'uil:angle-up' : 'uil:angle-down'),
+        toggleLabel: expanded ? 'Collapse' : 'Read digest',
+        onToggle: () => this.toggle(it.id),
+        onCopyId: e => { e.stopPropagation(); this.copy(it.id, 'Copied “deep-read ' + it.id + '” — paste it in chat'); }
+      });
+    };
+
+    const hero = b.hero ? deco(b.hero, 'hero') : null;
+    const rail = b.rail.map(r => deco(r, 'rail'));
+    const hasRail = rail.length > 0;
+    const keptCount = this.allItems(b).length;
+    const readMinutes = this.allItems(b).reduce((a, i) => a + i.minutes, 0);
+    const isArchived = st.archiveIdx >= 0;
+
+    const archive = [{ title: 'Today', meta: keptCount + ' kept · ' + b.patches.length + ' patches', kind: 'ui', live: b.live, idx: -1, icon: 'uil:apps' }]
+      .concat(t.archive.map((a, i) => Object.assign({ idx: i, icon: 'uil:apps' }, a)))
+      .concat([{ title: 'Pile — ' + t.channel + '-2026-11-04.md', meta: b.scanned + ' scanned · firehose', kind: 'md', idx: -2, icon: 'uil:file-alt' }])
+      .map(a => Object.assign(a, {
+        iconStyle: 'flex:none; color:' + (a.kind === 'md' ? 'var(--a-agent-b)' : 'var(--a-agent-a)') + ';',
+        style: 'padding:9px 10px; border-radius:8px; margin-bottom:6px; cursor:pointer; border:1px solid ' + (a.idx === st.archiveIdx ? 'var(--a-sel-line)' : 'var(--border-color)') + '; background:' + (a.idx === st.archiveIdx ? 'var(--a-sel)' : 'var(--elevation0)') + '; transition:border-color .1s;',
+        onClick: () => { if (a.idx === -2) { this.setState({ toast: { text: 'The pile opens in the Artifacts stack as a markdown artifact' } }); return; } this.setState({ archiveIdx: a.idx, programOpen: false }); }
+      }));
+
+    const archivedDay = isArchived ? t.archive[st.archiveIdx] : null;
+    const program = this.programFor(t);
+
+    const isLight = st.theme === 'light';
+    const palettes = PALETTE_ORDER.map(id => {
+      const p = PALETTES[id];
+      const active = id === st.palette;
+      return { label: p.label,
+        style: 'width:18px; height:18px; border-radius:50%; cursor:pointer; padding:0; background:linear-gradient(135deg, ' + p.bg + ' 50%, ' + p.swatch + ' 50%); border:2px solid ' + (active ? 'var(--text)' : 'transparent') + '; box-shadow:0 0 0 1px var(--a-hair-strong);',
+        onPick: () => this.setState({ palette: id, theme: 'light' }) };
+    });
+
+    return {
+      themeAttr: st.theme,
+      paletteVars: isLight ? PALETTES[st.palette].vars : '',
+      palettes, paletteLabel: PALETTES[st.palette].label,
+      pickerStyle: 'display:flex; align-items:center; gap:5px; height:32px; padding:0 8px; background:var(--elevation0); border:1px solid var(--border-color); border-radius:8px; opacity:' + (isLight ? '1' : '.45') + ';',
+      lightBtnStyle: themeBtn(st.theme === 'light'), darkBtnStyle: themeBtn(st.theme === 'dark'),
+      onLight: () => this.setState({ theme: 'light' }), onDark: () => this.setState({ theme: 'dark' }),
+      copyEndpointIcon: st.copied === 'ep' ? 'uil:check' : 'uil:copy',
+      copyEndpointStyle: 'width:24px; height:22px; display:flex; align-items:center; justify-content:center; border-radius:5px; border:none; background:transparent; color:' + (st.copied === 'ep' ? 'var(--positive)' : 'var(--text-light)') + '; cursor:pointer;',
+      onCopyEndpoint: () => this.copy('ep'),
+      feedBadgeCount: st.data.reduce((a, x) => a + (x.unreadCount || 0), 0),
+      feedBadgeStyle: 'min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--primary); color:#fff; font-size:10.5px; font-weight:700; display:' + (st.data.some(x => x.unreadCount) ? 'flex' : 'none') + '; align-items:center; justify-content:center;',
+
+      topics: st.data.map((x, i) => ({
+        label: x.label, icon: x.icon, live: !!x.briefing.live, unread: !!x.unreadCount, unreadCount: x.unreadCount || 0,
+        tabStyle: 'height:32px; display:flex; align-items:center; gap:7px; padding:0 12px; border-radius:8px; border:none; font-family:inherit; font-size:13px; cursor:pointer; background:' + (i === st.topicIdx ? 'var(--a-sel-strong)' : 'transparent') + '; color:' + (i === st.topicIdx ? 'var(--text)' : 'var(--text-light)') + '; font-weight:' + (i === st.topicIdx ? '600' : '500') + ';',
+        iconStyle: 'color:' + (i === st.topicIdx ? 'var(--a-agent-a)' : 'inherit') + ';',
+        onPick: () => { const d = st.data.slice(); d[i] = Object.assign({}, d[i], { unreadCount: 0 }); this.setState({ data: d, topicIdx: i, archiveIdx: -1, skipsOpen: false, flashId: null }); }
+      })),
+      channelId: t.channel, retentionDays: t.retention, topicLabel: t.label,
+
+      typeChipStyle: 'display:flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; flex:none; font-size:11px; font-weight:600; background:#5e35b1' + T.chipAlpha + '; color:var(--a-agent-a);',
+      briefingTitle: t.label + ' briefing — ' + (isArchived ? archivedDay.title : 'today'),
+      patchLabel: 'patch ' + b.patches.filter(p => p.state === 'done').length + ' of ' + b.patches.length,
+      followIcon: st.follow ? 'uil:play-circle' : 'uil:pause-circle',
+      followStyle: ghostBtn + (st.follow ? 'background:var(--a-sel-strong); border-color:var(--a-sel-line); color:var(--text);' : ''),
+      onToggleFollow: () => this.setState({ follow: !st.follow }),
+      programStyle: ghostBtn + (st.programOpen ? 'background:var(--a-sel-strong); border-color:var(--a-sel-line); color:var(--text);' : ''),
+      onToggleProgram: () => this.setState({ programOpen: !st.programOpen }),
+      ghostBtnStyle: ghostBtn, ghostLinkStyle: ghostBtn.replace('height:32px', 'height:30px'),
+      primaryBtnStyle: 'flex:none; height:30px; display:flex; align-items:center; gap:6px; padding:0 12px; border-radius:7px; border:none; background:var(--primary); color:#fff; font-size:12px; font-weight:600; font-family:inherit; cursor:pointer;',
+      closeBtnStyle: 'width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:6px; border:none; background:transparent; color:var(--text-light); cursor:pointer;',
+      copyLinkLabel: st.copied === 'link' ? 'Copied' : 'Copy link', copyLinkIcon: st.copied === 'link' ? 'uil:check' : 'uil:link',
+      onCopyLink: () => this.copy('link'),
+      stop,
+
+      isArchived, isToday: !isArchived,
+      archivedTitle: isArchived ? t.label + ' — ' + archivedDay.title : '',
+      archivedMeta: isArchived ? archivedDay.meta + '.' : '',
+      onBackToToday: () => this.setState({ archiveIdx: -1 }),
+      stageStyle: 'min-height:100%; animation:auroraSlideIn .22s ease-out;',
+
+      briefingDate: b.date, scanned: b.scanned, kept: keptCount, readMinutes, isLive: !!b.live,
+      patches: b.patches.map(p => ({
+        time: p.time, label: p.label,
+        icon: p.state === 'done' ? 'uil:check-circle' : p.state === 'running' ? 'uil:spinner-alt' : 'uil:clock',
+        iconStyle: 'color:' + (p.state === 'done' ? 'var(--a-live)' : p.state === 'running' ? 'var(--a-warn)' : 'var(--text-light)') + ';',
+        labelStyle: p.state === 'running' ? 'color:var(--a-warn); font-weight:600;' : ''
+      })),
+
+      heroGridStyle: 'display:grid; grid-template-columns:' + (hasRail ? 'minmax(0,1.7fr) minmax(0,1fr)' : 'minmax(0,1fr)') + '; gap:18px; align-items:start;',
+      hasHero: !!hero, hero: hero || {}, hasRail, rail,
+      sections: b.sections.map(s => ({ label: s.label, countLabel: s.items.length + (s.items.length === 1 ? ' story' : ' stories'), items: s.items.map(it => deco(it, 'list')) })),
+      hasThreads: b.threads.length > 0,
+      threads: b.threads.map(th => Object.assign({}, th, {
+        idStyle, dayStyle: 'display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; background:var(--a-info-bg); color:var(--a-info); font-size:10.5px; font-weight:700;',
+        history: th.history.map(h => ({ when: h.when, t: h.t })),
+        onCopyId: e => { e.stopPropagation(); this.copy(th.id, 'Copied “thread ' + th.id + '”'); }
+      })),
+
+      skippedCount: b.skippedCount, skipsOpen: st.skipsOpen,
+      skipIcon: st.skipsOpen ? 'uil:angle-down' : 'uil:angle-right',
+      skipLabel: st.skipsOpen ? 'Hide' : 'Show reasons',
+      skipToggleStyle: 'width:100%; display:flex; align-items:center; gap:10px; padding:12px 16px; border:none; background:transparent; color:var(--text); font-family:inherit; cursor:pointer; text-align:left; border-radius:12px;',
+      onToggleSkips: () => this.setState({ skipsOpen: !st.skipsOpen }),
+      skipped: b.skipped.map(s => ({ title: s.title, reason: s.reason, reasonStyle: 'flex:none; font-size:11.5px; color:var(--text-light); ' + mono })),
+      doneTitle: b.done, doneText: b.doneNote,
+
+      archive, archiveCountLabel: t.archiveTotal + ' of ' + t.retention + ' days',
+      retentionNote: 'Pruned on the next push. Oldest kept: ' + t.archive[t.archive.length - 1].title + '.',
+
+      programOpen: st.programOpen, program, stmtCount: program.filter(l => l.cls !== 'c').length,
+
+      hasToast: !!st.toast, toastText: st.toast ? st.toast.text : '', toastHasAction: !!(st.toast && st.toast.topic !== undefined),
+      onToastOpen: () => { const i = st.toast.topic; const d = st.data.slice(); d[i] = Object.assign({}, d[i], { unreadCount: 0 }); this.setState({ toast: null, data: d, topicIdx: i, archiveIdx: -1 }); },
+      onToastDismiss: () => this.setState({ toast: null }),
+      onSimulate: () => this.simulate()
+    };
+  }
+}
+</script>
+</body>
+</html>

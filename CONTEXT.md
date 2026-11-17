@@ -53,6 +53,32 @@ _Avoid_: spec, layout, source file
 A push mode sending only changed statements; merged server-side into a new full-program snapshot, never stored as a delta.
 _Avoid_: diff, delta, partial update
 
+### Reading briefing
+
+**Channel**:
+A session the agent declared with `session_kind: "channel"`: durable, re-opened by the same agent-minted id across days, pinned in the session list, and pruned by its retention on every push (ADR-0009).
+_Avoid_: feed, topic, inbox
+
+**Retention**:
+A channel's `retention_days`; artifacts whose `updated_at` is older are deleted on the next push into that channel.
+_Avoid_: TTL, expiry
+
+**Briefing**:
+One UI artifact per day in a channel, composed from the digest components and patched in place as scans complete.
+_Avoid_: newsletter, digest page, feed
+
+**Digest**:
+The agent's written summary of one kept story (sapo, why-you line, body) — the product aurora shows; the original source stays an external link.
+_Avoid_: article, summary card
+
+**Variant**:
+A `DigestCard`'s editorial weight — `hero`, `rail`, or `list`. The agent ranks; the house theme decides what each rank looks like.
+_Avoid_: size, style, layout
+
+**Handle**:
+An agent-minted, program-unique label (`story_id` on a `DigestCard`, `thread_id` on a `ThreadUpdate`) used in chat references and as the patch anchor. Not looked up server-side.
+_Avoid_: key, slug, item id
+
 ### Agent read surface
 
 **Read surface**:
