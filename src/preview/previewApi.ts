@@ -8,6 +8,8 @@ export interface SessionMeta {
   title: string;
   created_at: string;
   last_activity: string;
+  kind?: "channel";
+  retention_days?: number;
 }
 
 export interface SessionWithCount extends SessionMeta {

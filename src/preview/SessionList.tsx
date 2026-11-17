@@ -9,6 +9,7 @@ import { previewApi, type SessionWithCount, previewUrl } from "./previewApi";
 import { onArtifactEvent } from "./liveSocket";
 import { Icon } from "../components/Icon";
 import { PreviewTopBar } from "./PreviewTopBar";
+import { groupSessions } from "./sessionGroups";
 
 const TOOLS = ["push_markdown", "push_mermaid", "push_image", "push_video", "push_audio", "push_chart"];
 
@@ -60,6 +61,34 @@ export function SessionList() {
   };
 
   const endpoint = `${window.location.origin}/mcp`;
+  const { channels, others } = groupSessions(sessions ?? []);
+
+  const renderRow = (s: SessionWithCount) => (
+    <a key={s.session_id} className="aur-sessrow" href={previewUrl(s.session_id)}>
+      <div className="aur-sessrow__avatar">
+        <Icon name={s.kind === "channel" ? "uil:channel" : "uil:layer-group"} size={17} />
+      </div>
+      <div className="aur-sessrow__main">
+        <div className="aur-sessrow__titlerow">
+          <span className="aur-sessrow__title">{s.title}</span>
+        </div>
+        <div className="aur-sessrow__sub">{s.session_id}</div>
+      </div>
+      <div className="aur-sessrow__meta">
+        {s.kind === "channel" && <span className="aur-sessrow__retention">retention {s.retention_days}d</span>}
+        <span className="aur-sessrow__count">{s.artifact_count} artifact{s.artifact_count === 1 ? "" : "s"}</span>
+      </div>
+      <div className="aur-sessrow__time">{fmtActivity(s.last_activity)}</div>
+      <button
+        className="aur-sessrow__delete"
+        title="Delete session"
+        aria-label={`Delete session ${s.title}`}
+        onClick={(e) => remove(e, s.session_id)}
+      >
+        <Icon name="uil:trash-alt" size={15} />
+      </button>
+    </a>
+  );
 
   return (
     <div className="aur-preview">
@@ -82,31 +111,16 @@ export function SessionList() {
             {sessions === null && !error && <p className="aur-preview__empty">Loading…</p>}
 
             {sessions !== null && sessions.length > 0 && (
-              <div className="aur-sesslist">
-                {sessions.map((s) => (
-                  <a key={s.session_id} className="aur-sessrow" href={previewUrl(s.session_id)}>
-                    <div className="aur-sessrow__avatar"><Icon name="uil:layer-group" size={17} /></div>
-                    <div className="aur-sessrow__main">
-                      <div className="aur-sessrow__titlerow">
-                        <span className="aur-sessrow__title">{s.title}</span>
-                      </div>
-                      <div className="aur-sessrow__sub">{s.session_id}</div>
-                    </div>
-                    <div className="aur-sessrow__meta">
-                      <span className="aur-sessrow__count">{s.artifact_count} artifact{s.artifact_count === 1 ? "" : "s"}</span>
-                    </div>
-                    <div className="aur-sessrow__time">{fmtActivity(s.last_activity)}</div>
-                    <button
-                      className="aur-sessrow__delete"
-                      title="Delete session"
-                      aria-label={`Delete session ${s.title}`}
-                      onClick={(e) => remove(e, s.session_id)}
-                    >
-                      <Icon name="uil:trash-alt" size={15} />
-                    </button>
-                  </a>
-                ))}
-              </div>
+              <>
+                {channels.length > 0 && (
+                  <>
+                    <div className="aur-sesslist__group">Channels</div>
+                    <div className="aur-sesslist">{channels.map(renderRow)}</div>
+                    {others.length > 0 && <div className="aur-sesslist__group">Sessions</div>}
+                  </>
+                )}
+                {others.length > 0 && <div className="aur-sesslist">{others.map(renderRow)}</div>}
+              </>
             )}
 
             {sessions !== null && sessions.length === 0 && !error && (

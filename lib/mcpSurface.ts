@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
-import type { ArtifactMeta, ArtifactStore, MediaSource, PushResult } from "./artifactStore";
+import type { ArtifactMeta, ArtifactStore, ChannelOptions, MediaSource, PushResult } from "./artifactStore";
 import { DEFAULT_MEDIA_SIZE_CAP } from "./artifactStore";
 import {
   mapArtifactToContent,
@@ -600,7 +600,7 @@ function registerReadTools(server: McpServer, store: ArtifactStore, baseUrl: str
       title: "List sessions",
       description:
         "List aurora sessions, most recent activity first, paginated. Returns {sessions, total, offset, limit}; " +
-        "each session carries session_id, title, created_at, last_activity. " +
+        "each session carries session_id, title, created_at, last_activity, plus kind and retention_days for channel sessions. " +
         "Page with offset until offset + sessions.length reaches total. " +
         "Use list_artifacts(session_id) to see what a session produced.",
       inputSchema: {
@@ -631,7 +631,8 @@ function registerReadTools(server: McpServer, store: ArtifactStore, baseUrl: str
               page.sessions
                 .map(
                   (s) =>
-                    `${s.session_id} | ${s.title} | last_activity ${s.last_activity} | created ${s.created_at}`
+                    `${s.session_id} | ${s.title} | last_activity ${s.last_activity} | created ${s.created_at}` +
+                    (s.kind === "channel" ? ` | channel retention ${s.retention_days}d` : "")
                 )
                 .join("\n");
         return {
@@ -789,6 +790,60 @@ function toolError(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true as const };
 }
 
+/**
+ * Channel params (spec #86, ADR-0009): accepted by push_ui and push_markdown
+ * only. A channel is a sticky session whose artifacts are pruned by
+ * retention on every later push.
+ */
+const CHANNEL_INPUT_SCHEMA = {
+  session_kind: z
+    .enum(["channel"])
+    .optional()
+    .describe(
+      'Set "channel" to make this session a durable channel (sticky; pushes into it prune artifacts older than retention_days). Omit for an ordinary session.'
+    ),
+  retention_days: z
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .optional()
+    .describe("Channel retention in days (default 30 on first upgrade). Requires session_kind: channel unless the session is already a channel."),
+};
+
+/**
+ * Validate channel params against the session's current kind before anything
+ * is written. retention_days on a session that is not (and is not being made)
+ * a channel would let an agent believe a session is retained when it is not.
+ */
+async function resolveChannel(
+  store: ArtifactStore,
+  sessionId: string,
+  sessionKind: "channel" | undefined,
+  retentionDays: number | undefined
+): Promise<{ channel?: ChannelOptions; error?: string }> {
+  if (sessionKind === "channel") return { channel: { retention_days: retentionDays } };
+  if (retentionDays === undefined) return {};
+  const existing = await store.getSession(sessionId);
+  if (existing?.kind === "channel") return { channel: { retention_days: retentionDays } };
+  return {
+    error:
+      `retention_days requires session_kind: "channel" — session ${sessionId} is not a channel. ` +
+      'Pass session_kind: "channel" together with retention_days to make it one, or drop retention_days.',
+  };
+}
+
+/** Channel suffix for push responses: empty for ordinary sessions. */
+function channelSummary(result: PushResult) {
+  const { session, pruned } = result;
+  if (session.kind !== "channel") return { text: "", structured: {} };
+  const detail = `retention ${session.retention_days}d${pruned.length > 0 ? `, pruned ${pruned.length}` : ""}`;
+  return {
+    text: ` Session is a channel (${detail}).`,
+    structured: { session_kind: "channel" as const, retention_days: session.retention_days, pruned: pruned.length },
+  };
+}
+
 const ID_SCHEMA = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/, "alphanumerics, dot, underscore, hyphen; max 128 chars");
@@ -892,10 +947,18 @@ function registerPushUiTool(
           ),
         artifact_id: OPTIONAL_ID_SCHEMA,
         session_title: SESSION_TITLE_SCHEMA,
+        ...CHANNEL_INPUT_SCHEMA,
       },
     },
-    async ({ session_id, title, program, mode, artifact_id, session_title }) => {
+    async ({ session_id, title, program, mode, artifact_id, session_title, session_kind, retention_days }) => {
       try {
+        const { channel, error: channelError } = await resolveChannel(
+          store,
+          session_id,
+          session_kind,
+          retention_days
+        );
+        if (channelError) return toolError(channelError);
         // Patch mode (issue #41): merge server-side against the previous
         // snapshot's source; the merged full program becomes the new immutable
         // snapshot (ADR 0002 — deltas are never stored).
@@ -928,12 +991,13 @@ function registerPushUiTool(
         // this validates the merged result, so caps apply to the merge too.
         const errors = validateUiProgram(program);
         if (errors.length > 0) return toolError(formatUiProgramErrors(errors));
-        const result = await store.pushUi({ session_id, title, program, artifact_id, session_title });
+        const result = await store.pushUi({ session_id, title, program, artifact_id, session_title, channel });
         // Thin live-update event: clients refetch content over HTTP.
         liveBus?.broadcast(artifactEvent(result));
         const { artifact, created } = result;
         const deep_link = `${baseUrl}${sessionPath(session_id)}`;
-        const text = `${merged ? "Patched" : created ? "Pushed" : "Replaced"} UI artifact ${artifact.artifact_id} in session ${session_id}. Deep link: ${deep_link}`;
+        const ch = channelSummary(result);
+        const text = `${merged ? "Patched" : created ? "Pushed" : "Replaced"} UI artifact ${artifact.artifact_id} in session ${session_id}.${ch.text} Deep link: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
@@ -941,6 +1005,7 @@ function registerPushUiTool(
             artifact_id: artifact.artifact_id,
             created,
             merged,
+            ...ch.structured,
             // Patch merge is by name; echoing the final statement-name list
             // lets the agent chain patches without holding the old program.
             ...(merged ? { statement_names: statementNames(program) } : {}),
@@ -1047,7 +1112,14 @@ export async function handleMcpRequest(
     description: string,
     valueField: "content" | "code",
     valueDescription: string,
-    push: (input: { session_id: string; title: string; artifact_id?: string; session_title?: string }) => Promise<PushResult>
+    push: (input: {
+      session_id: string;
+      title: string;
+      artifact_id?: string;
+      session_title?: string;
+      channel?: ChannelOptions;
+    }) => Promise<PushResult>,
+    channelParams = false
   ) => {
     // Shared shape: session/title/value + optional artifact_id/session_title;
     // response carries the preview deep link either way.
@@ -1071,27 +1143,38 @@ export async function handleMcpRequest(
             .string()
             .optional()
             .describe("Session title, honored only when the session is created by this push"),
+          ...(channelParams ? CHANNEL_INPUT_SCHEMA : {}),
         },
       },
       async (args) => {
-        const { session_id, title, artifact_id, session_title } = args as {
+        const { session_id, title, artifact_id, session_title, session_kind, retention_days } = args as {
           session_id: string;
           title: string;
           artifact_id?: string;
           session_title?: string;
+          session_kind?: "channel";
+          retention_days?: number;
         };
-        const result = await push(args as any);
+        let channel: ChannelOptions | undefined;
+        if (channelParams) {
+          const resolved = await resolveChannel(store, session_id, session_kind, retention_days);
+          if (resolved.error) return toolError(resolved.error);
+          channel = resolved.channel;
+        }
+        const result = await push({ ...(args as any), channel });
         // Thin live-update event: clients refetch content over HTTP.
         liveBus?.broadcast(artifactEvent(result));
         const { artifact, created } = result;
         const deep_link = `${baseUrl}${sessionPath(session_id)}`;
-        const text = `${created ? "Pushed" : "Replaced"} artifact ${artifact.artifact_id} in session ${session_id}. Deep link: ${deep_link}`;
+        const ch = channelSummary(result);
+        const text = `${created ? "Pushed" : "Replaced"} artifact ${artifact.artifact_id} in session ${session_id}.${ch.text} Deep link: ${deep_link}`;
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
             session_id,
             artifact_id: artifact.artifact_id,
             created,
+            ...ch.structured,
             deep_link,
           },
         };
@@ -1105,7 +1188,8 @@ export async function handleMcpRequest(
     "Push a markdown artifact to an aurora preview session. Creates the session implicitly on first push. Returns a deep link the human can open.",
     "content",
     "Markdown source",
-    (input) => store.pushMarkdown(input as any)
+    (input) => store.pushMarkdown(input as any),
+    true
   );
 
   pushTextTool(
