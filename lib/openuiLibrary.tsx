@@ -16,6 +16,7 @@ import {
 import { CHART_TYPES, chartContractError, chartDataSchema, type ChartData, type ChartType } from "./chartContract";
 import { ChartView } from "../src/preview/ChartView";
 import { MermaidView } from "../src/preview/MermaidView";
+import { DigestCardView } from "../src/preview/DigestCardView";
 
 /** The text content string cap: no single string literal may exceed this. */
 export const MAX_STRING_LENGTH = 10_000;
@@ -84,12 +85,43 @@ export const Card = defineComponent({
   component: (p: any) => <div className="aur-ui__card">{p.renderNode(p.props.children)}</div>,
 });
 
+/**
+ * One kept story with editorial weight (issue #90, spec #86 D6). `variant` is
+ * the only weight control; `story_id` is the copyable handle. Expand/collapse
+ * is client-side (src/preview/expandState.tsx).
+ */
+export const DigestCard = defineComponent({
+  name: "DigestCard",
+  description: "Digest story card; expands to body, children, source link.",
+  props: z.object({
+    story_id: z.string().describe("Handle, unique in the program"),
+    variant: z.enum(["hero", "rail", "list"]),
+    title: z.string(),
+    source: z.string(),
+    lang: z.string(),
+    minutes: z.number(),
+    sapo: z.string(),
+    why: z.string(),
+    body: z.string().optional().describe("Paragraphs split on blank lines"),
+    children: z.array(CardChild).optional(),
+    url: z.string().optional().describe("https:// link"),
+  }),
+  component: (p: any) => (
+    <DigestCardView
+      {...p.props}
+      hasChildren={Array.isArray(p.props.children) && p.props.children.length > 0}
+    >
+      {p.renderNode(p.props.children)}
+    </DigestCardView>
+  ),
+});
+
 /** Layout container arranging children in a row or column. */
 export const Stack = defineComponent({
   name: "Stack",
   description: "Layout container (row or column); may nest Stack.",
   props: z.object({
-    children: z.array(z.union([Card.ref, Text.ref, Chart.ref, Mermaid.ref])).describe("Child elements"),
+    children: z.array(z.union([Card.ref, DigestCard.ref, Text.ref, Chart.ref, Mermaid.ref])).describe("Child elements"),
     direction: z.enum(["row", "column"]).describe("Layout direction"),
   }),
   component: (p: any) => (
@@ -106,7 +138,7 @@ export const Stack = defineComponent({
  * definition.
  */
 export const auroraUiLibrary = createLibrary({
-  components: [Stack, Card, Text, Chart, Mermaid],
+  components: [Stack, Card, DigestCard, Text, Chart, Mermaid],
   root: "Stack",
 });
 
@@ -298,6 +330,13 @@ export function validateUiProgram(source: string): UiProgramError[] {
   // (ADR-0010), so out-of-union children are rejected here.
   errors.push(...childTypeErrors(result.root, auroraUiLibrary.toJSONSchema(), source));
 
+  // Digest handles and links (issue #90, D8/D6). Uniqueness is per kind.
+  const digestNodes = collectNodes(result.root, "DigestCard");
+  errors.push(
+    ...handleErrors(digestNodes, "story_id", "duplicate-handle", source),
+    ...urlErrors(digestNodes, source)
+  );
+
   for (const e of result.meta.errors) {
     const line = e.statementId ? lineOfStatement(source, e.statementId) : undefined;
     errors.push({
@@ -349,6 +388,75 @@ function collectChartNodes(node: unknown, out: ParsedNode[] = []): ParsedNode[] 
   const children = n.props?.children;
   if (Array.isArray(children)) for (const c of children) collectChartNodes(c, out);
   return out;
+}
+
+/** Depth-first collection of element nodes of one component type. */
+function collectNodes(node: unknown, typeName: string, out: ParsedNode[] = []): ParsedNode[] {
+  if (!node || typeof node !== "object") return out;
+  const n = node as ParsedNode;
+  if (n.type === "element" && n.typeName === typeName) out.push(n);
+  const children = n.props?.children;
+  if (Array.isArray(children)) for (const c of children) collectNodes(c, typeName, out);
+  return out;
+}
+
+/** Longest allowed handle (spec #86 D8). */
+export const MAX_HANDLE_LENGTH = 64;
+
+/** Why a handle is invalid (empty, over the length cap, or containing whitespace); null when valid. */
+export function handleProblem(handle: string): string | null {
+  if (handle.length === 0) return "is empty";
+  if (handle.length > MAX_HANDLE_LENGTH) return `is ${handle.length} chars, over the ${MAX_HANDLE_LENGTH}-char cap`;
+  if (/\s/.test(handle)) return "contains whitespace";
+  return null;
+}
+
+/**
+ * Handle checks for one kind of node (D8): each handle must be valid and unique
+ * within the program. Reusable for other handle kinds (e.g. ThreadUpdate.thread_id)
+ * — pass that kind's prop and duplicate code; namespaces stay separate because
+ * each call only sees its own nodes.
+ */
+function handleErrors(nodes: ParsedNode[], prop: string, duplicateCode: string, source: string): UiProgramError[] {
+  const errors: UiProgramError[] = [];
+  const seen = new Set<string>();
+  for (const node of nodes) {
+    const handle = node.props?.[prop];
+    if (typeof handle !== "string") continue; // shape errors already reported by the parser
+    const base = { line: node.statementId ? lineOfStatement(source, node.statementId) : undefined, statementId: node.statementId };
+    const problem = handleProblem(handle);
+    if (problem) {
+      errors.push({
+        ...base,
+        code: "invalid-handle",
+        message: `${prop} ${JSON.stringify(handle)} ${problem}. Handles are non-empty, at most ${MAX_HANDLE_LENGTH} chars, no whitespace.`,
+      });
+    } else if (seen.has(handle)) {
+      errors.push({
+        ...base,
+        code: duplicateCode,
+        message: `${prop} ${JSON.stringify(handle)} is used more than once in this program. Handles must be unique.`,
+      });
+    }
+    seen.add(handle);
+  }
+  return errors;
+}
+
+/** `url` must be an https:// link (rendered as an outbound anchor, never fetched). */
+function urlErrors(nodes: ParsedNode[], source: string): UiProgramError[] {
+  return nodes.flatMap((node) => {
+    const url = node.props?.url;
+    if (typeof url !== "string" || url.startsWith("https://")) return [];
+    return [
+      {
+        line: node.statementId ? lineOfStatement(source, node.statementId) : undefined,
+        statementId: node.statementId,
+        code: "invalid-url",
+        message: `url ${JSON.stringify(url)} must start with https://.`,
+      },
+    ];
+  });
 }
 
 /** The one hand-written exception to the schema-derived allowed children: Stack nests Stack. */
