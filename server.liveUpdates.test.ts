@@ -108,3 +108,80 @@ describe("live updates over /ws", () => {
     await client.close();
   });
 });
+
+describe("briefing live patch (issue #91)", () => {
+  const BRIEFING = [
+    'root = Stack([hdr, sec1, itm_003, thr_neo4j, done], "column")',
+    'hdr = BriefingHeader("Wed 4 Nov", 142, 1, 12, true)',
+    'sec1 = SectionHeader("Agent infra")',
+    'itm_003 = DigestCard("itm-003", "list", "Title", "GitHub", "EN", 2, "Sapo.", "Why you.")',
+    'thr_neo4j = ThreadUpdate("thr-neo4j", "Graph memory", "Day one update.")',
+    'done = DoneMarker("You\'re done.")',
+  ].join("\n");
+
+  it("patch adding a DigestCard merges into a full snapshot and the live bus emits; a patched thread updates in place", async () => {
+    const transport = new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`));
+    const client = new Client({ name: "ws-briefing-client", version: "0.0.1" });
+    await client.connect(transport);
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener("open", () => resolve());
+      ws.addEventListener("error", () => reject(new Error("ws connect failed")));
+    });
+
+    const first: any = await client.callTool({
+      name: "push_ui",
+      arguments: { session_id: "ws-briefing", title: "Tech briefing", program: BRIEFING },
+    });
+    expect(first.isError).toBeUndefined();
+    const aid = first.structuredContent.artifact_id;
+
+    // Patch 1: a new card, wired into root at sec1's position.
+    const updated1 = nextEvent(ws, (e) => e.event === "updated" && e.artifact_id === aid);
+    const patch1: any = await client.callTool({
+      name: "push_ui",
+      arguments: {
+        session_id: "ws-briefing",
+        title: "Tech briefing",
+        mode: "patch",
+        artifact_id: aid,
+        program: [
+          'root = Stack([hdr, sec1, itm_009, itm_003, thr_neo4j, done], "column")',
+          'itm_009 = DigestCard("itm-009", "list", "Breaking", "LWN", "EN", 2, "Sapo.", "Why you.")',
+        ].join("\n"),
+      },
+    });
+    expect(patch1.isError).toBeUndefined();
+    expect(patch1.structuredContent.merged).toBe(true);
+    expect(patch1.structuredContent.statement_names).toEqual([
+      "root", "hdr", "sec1", "itm_003", "thr_neo4j", "done", "itm_009",
+    ]);
+    expect(await updated1).toEqual({ event: "updated", session_id: "ws-briefing", artifact_id: aid });
+
+    const snap1 = await (await fetch(`${BASE}/api/preview/sessions/ws-briefing/artifacts/${aid}`)).json();
+    expect(snap1.content).toContain('itm_009 = DigestCard("itm-009"');
+    expect(snap1.content).toContain("itm_003 = DigestCard"); // untouched statements kept: full snapshot
+
+    // Patch 2: only the thread statement, new text, same name.
+    const updated2 = nextEvent(ws, (e) => e.event === "updated" && e.artifact_id === aid);
+    const patch2: any = await client.callTool({
+      name: "push_ui",
+      arguments: {
+        session_id: "ws-briefing",
+        title: "Tech briefing",
+        mode: "patch",
+        artifact_id: aid,
+        program: 'thr_neo4j = ThreadUpdate("thr-neo4j", "Graph memory", "Day two: new benchmark.", "Day 2", [{when: "Mon 2", text: "Opened."}])',
+      },
+    });
+    expect(patch2.isError).toBeUndefined();
+    await updated2;
+    const snap2 = await (await fetch(`${BASE}/api/preview/sessions/ws-briefing/artifacts/${aid}`)).json();
+    expect(snap2.content).toContain("Day two: new benchmark.");
+    expect(snap2.content).not.toContain("Day one update.");
+    expect(snap2.content).toContain('itm_009 = DigestCard("itm-009"');
+
+    ws.close();
+    await client.close();
+  });
+});

@@ -17,6 +17,13 @@ import { CHART_TYPES, chartContractError, chartDataSchema, type ChartData, type 
 import { ChartView } from "../src/preview/ChartView";
 import { MermaidView } from "../src/preview/MermaidView";
 import { DigestCardView } from "../src/preview/DigestCardView";
+import {
+  BriefingHeaderView,
+  DoneMarkerView,
+  SectionHeaderView,
+  SkipListView,
+  ThreadUpdateView,
+} from "../src/preview/BriefingViews";
 
 /** The text content string cap: no single string literal may exceed this. */
 export const MAX_STRING_LENGTH = 10_000;
@@ -92,7 +99,7 @@ export const Card = defineComponent({
  */
 export const DigestCard = defineComponent({
   name: "DigestCard",
-  description: "Digest story card; expands to body, children, source link.",
+  description: "Digest story card; patch by statement name (itm_1 = \"itm-1\").",
   props: z.object({
     story_id: z.string().describe("Handle, unique in the program"),
     variant: z.enum(["hero", "rail", "list"]),
@@ -116,12 +123,84 @@ export const DigestCard = defineComponent({
   ),
 });
 
+/**
+ * Briefing frame (issue #91, spec #86 D9). Five components around the digest
+ * cards; aurora enforces no ordering between them (header first / done last is
+ * agent convention) and `kept` is whatever the agent states.
+ */
+export const BriefingHeader = defineComponent({
+  name: "BriefingHeader",
+  description: "Briefing masthead; passes = patch timeline.",
+  props: z.object({
+    date: z.string(),
+    scanned: z.number(),
+    kept: z.number(),
+    minutes: z.number().optional().describe("Total read minutes"),
+    live: z.boolean().optional().describe("Show the Live pill"),
+    kicker: z.string().optional(),
+    passes: z
+      .array(z.object({ time: z.string(), label: z.string(), state: z.enum(["done", "running", "queued"]) }))
+      .optional(),
+  }),
+  component: (p: any) => <BriefingHeaderView {...p.props} />,
+});
+
+export const SectionHeader = defineComponent({
+  name: "SectionHeader",
+  description: "Section rule with a label.",
+  props: z.object({
+    label: z.string(),
+    note: z.string().optional().describe("Right-aligned note, e.g. a count"),
+  }),
+  component: (p: any) => <SectionHeaderView {...p.props} />,
+});
+
+export const ThreadUpdate = defineComponent({
+  name: "ThreadUpdate",
+  description: "Tracked thread; patch by statement name (thr_x = \"thr-x\").",
+  props: z.object({
+    thread_id: z.string().describe("Handle, unique among threads in the program"),
+    title: z.string(),
+    update: z.string(),
+    day: z.string().optional(),
+    history: z.array(z.object({ when: z.string(), text: z.string() })).optional(),
+  }),
+  component: (p: any) => <ThreadUpdateView {...p.props} />,
+});
+
+export const SkipList = defineComponent({
+  name: "SkipList",
+  description: "Collapsed skipped list; count may exceed items.",
+  props: z.object({
+    count: z.number(),
+    items: z.array(z.object({ title: z.string(), reason: z.string() })),
+  }),
+  component: (p: any) => <SkipListView {...p.props} />,
+});
+
+export const DoneMarker = defineComponent({
+  name: "DoneMarker",
+  description: "End-of-briefing line.",
+  props: z.object({
+    title: z.string(),
+    text: z.string().optional(),
+  }),
+  component: (p: any) => <DoneMarkerView {...p.props} />,
+});
+
 /** Layout container arranging children in a row or column. */
 export const Stack = defineComponent({
   name: "Stack",
   description: "Layout container (row or column); may nest Stack.",
   props: z.object({
-    children: z.array(z.union([Card.ref, DigestCard.ref, Text.ref, Chart.ref, Mermaid.ref])).describe("Child elements"),
+    children: z
+      .array(
+        z.union([
+          Card.ref, DigestCard.ref, Text.ref, Chart.ref, Mermaid.ref,
+          BriefingHeader.ref, SectionHeader.ref, ThreadUpdate.ref, SkipList.ref, DoneMarker.ref,
+        ])
+      )
+      .describe("Child elements"),
     direction: z.enum(["row", "column"]).describe("Layout direction"),
   }),
   component: (p: any) => (
@@ -138,7 +217,7 @@ export const Stack = defineComponent({
  * definition.
  */
 export const auroraUiLibrary = createLibrary({
-  components: [Stack, Card, DigestCard, Text, Chart, Mermaid],
+  components: [Stack, Card, Text, Chart, Mermaid, BriefingHeader, DigestCard, SectionHeader, ThreadUpdate, SkipList, DoneMarker],
   root: "Stack",
 });
 
@@ -330,11 +409,13 @@ export function validateUiProgram(source: string): UiProgramError[] {
   // (ADR-0010), so out-of-union children are rejected here.
   errors.push(...childTypeErrors(result.root, auroraUiLibrary.toJSONSchema(), source));
 
-  // Digest handles and links (issue #90, D8/D6). Uniqueness is per kind.
+  // Digest handles and links (issues #90, #91; D8/D6). Uniqueness is per kind.
   const digestNodes = collectNodes(result.root, "DigestCard");
   errors.push(
     ...handleErrors(digestNodes, "story_id", "duplicate-handle", source),
-    ...urlErrors(digestNodes, source)
+    ...urlErrors(digestNodes, source),
+    // ThreadUpdate.thread_id: same checks, its own uniqueness namespace (issue #91).
+    ...handleErrors(collectNodes(result.root, "ThreadUpdate"), "thread_id", "duplicate-handle", source)
   );
 
   for (const e of result.meta.errors) {
@@ -536,6 +617,26 @@ export const WORKED_EXAMPLE = `root = Stack([c, m], "column")
 c = Chart("pie", {kind: "pie", points: [{label: "Q1", value: 12}]})
 m = Mermaid("flowchart TD\\nA-->B")`;
 
+/**
+ * Digest worked example (issue #91): a compact briefing using every digest
+ * component and the hero+rail row Stack. Handle convention: a statement name is
+ * its handle with `-` as `_` (itm_001 holds "itm-001"), so a later
+ * mode:"patch" push replaces that card by name. Parsed and validated clean by
+ * the test suite, like WORKED_EXAMPLE.
+ */
+export const DIGEST_WORKED_EXAMPLE = `root = Stack([hdr, top, sec1, itm_003, thr_graph, skips, done], "column")
+hdr = BriefingHeader("Wed 4 Nov", 142, 3, 12, true)
+top = Stack([itm_001, rail], "row")
+rail = Stack([itm_002], "column")
+itm_001 = DigestCard("itm-001", "hero", "Title", "HN", "EN", 6, "Sapo.", "Why you.", "Para one.\\n\\nPara two.", [prov])
+prov = Mermaid("graph LR\\nA-->B")
+itm_002 = DigestCard("itm-002", "rail", "Title", "LWN", "EN", 2, "Sapo.", "Why you.")
+sec1 = SectionHeader("Agent infra")
+itm_003 = DigestCard("itm-003", "list", "Title", "GitHub", "EN", 2, "Sapo.", "Why you.")
+thr_graph = ThreadUpdate("thr-graph", "Graph memory", "New benchmark.", "Day 3")
+skips = SkipList(12, [{title: "Listicle", reason: "low signal"}])
+done = DoneMarker("You're done.")`;
+
 /** Cross-guidance appended to the generated prompt (also present on push_chart). */
 export const PUSH_UI_CROSS_GUIDANCE =
   'push_chart: one chart artifact. push_ui: composed dashboards (layout, multiple charts/diagrams, or text).';
@@ -553,7 +654,7 @@ export function generateUiToolDescription(): string {
       bindings: false,
       editMode: false,
       inlineMode: false,
-      examples: [WORKED_EXAMPLE],
+      examples: [WORKED_EXAMPLE, DIGEST_WORKED_EXAMPLE],
     },
   });
   return STRIPPED_SECTIONS.reduce(stripSection, generated) + "\n\n" + PUSH_UI_CROSS_GUIDANCE;
