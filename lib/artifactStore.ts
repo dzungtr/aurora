@@ -46,7 +46,19 @@ export interface SessionMeta {
   title: string;
   created_at: string;
   last_activity: string;
+  /** Absent = ordinary session. "channel" is sticky and enables prune-on-push (ADR-0009). */
+  kind?: "channel";
+  /** Channels only: artifacts whose updated_at is older than this many days are pruned on push. */
+  retention_days?: number;
 }
+
+/** Channel declaration carried by a push; creates or upgrades the session (ADR-0009). */
+export interface ChannelOptions {
+  retention_days?: number;
+}
+
+/** Retention applied when a session first becomes a channel without an explicit value. */
+export const DEFAULT_CHANNEL_RETENTION_DAYS = 30;
 
 /** One page of `ArtifactStore.listSessions`, plus the full session count. */
 export interface SessionPage {
@@ -81,6 +93,7 @@ export interface PushMediaInput {
   size_cap?: number;
   /** audio: optional transcript persisted with the artifact metadata */
   transcript?: string;
+  channel?: ChannelOptions;
 }
 
 export interface PushMarkdownInput {
@@ -91,6 +104,8 @@ export interface PushMarkdownInput {
   session_title?: string;
   /** artifact kind, defaults to "markdown"; set to "mermaid" by pushMermaid */
   type?: string;
+  /** declare/upgrade the session as a channel (sticky), optionally setting retention */
+  channel?: ChannelOptions;
 }
 
 export interface PushChartInput {
@@ -107,6 +122,8 @@ export interface PushResult {
   artifact: ArtifactMeta;
   /** true when the push created a new artifact, false when it replaced one in place */
   created: boolean;
+  /** ids of artifacts pruned from a channel by this push (empty for ordinary sessions) */
+  pruned: string[];
 }
 
 /**
@@ -237,25 +254,62 @@ export class ArtifactStore {
   /**
    * First push to an unseen session implicitly creates it (session_title
    * honored only at creation). Returns the (possibly newly created) session
-   * meta with last_activity bumped to `now`.
+   * meta with last_activity bumped to `now`. `channel` creates or upgrades the
+   * session to a channel: kind is sticky, retention defaults to 30 on first
+   * upgrade, and a supplied retention_days always wins (ADR-0009).
    */
-  private async ensureSession(sessionId: string, sessionTitle: string | undefined, now: string) {
+  private async ensureSession(
+    sessionId: string,
+    sessionTitle: string | undefined,
+    now: string,
+    channel?: ChannelOptions
+  ) {
     const sDir = sessionDir(this.baseDir, sessionId);
-    let session = await this.getSession(sessionId);
-    if (!session) {
-      session = {
-        session_id: sessionId,
-        title: sessionTitle?.trim() || sessionId,
-        created_at: now,
-        last_activity: now,
-      };
-      await mkdir(sDir, { recursive: true });
-      atomicWriteFileSync(join(sDir, "meta.json"), JSON.stringify(session, null, 2));
-      return session;
+    const existing = await this.getSession(sessionId);
+    const session: SessionMeta = existing
+      ? { ...existing, last_activity: now }
+      : {
+          session_id: sessionId,
+          title: sessionTitle?.trim() || sessionId,
+          created_at: now,
+          last_activity: now,
+        };
+    if (channel) {
+      session.kind = "channel";
+      session.retention_days =
+        channel.retention_days ?? session.retention_days ?? DEFAULT_CHANNEL_RETENTION_DAYS;
     }
-    session = { ...session, last_activity: now };
+    if (!existing) await mkdir(sDir, { recursive: true });
     atomicWriteFileSync(join(sDir, "meta.json"), JSON.stringify(session, null, 2));
     return session;
+  }
+
+  /**
+   * Delete a channel's artifacts whose updated_at is older than
+   * `now - retention_days`, except `keepArtifactId`. No-op for ordinary or
+   * unknown sessions; never touches other sessions or the session itself.
+   * Returns the removed artifact ids (ADR-0009).
+   */
+  async pruneChannel(sessionId: string, now: string, keepArtifactId: string): Promise<string[]> {
+    validateId(sessionId);
+    const session = await this.getSession(sessionId);
+    if (!session || session.kind !== "channel") return [];
+    const days = session.retention_days ?? DEFAULT_CHANNEL_RETENTION_DAYS;
+    const cutoff = Date.parse(now) - days * 86_400_000;
+    const removed: string[] = [];
+    for (const meta of await this.listArtifacts(sessionId)) {
+      if (meta.artifact_id === keepArtifactId) continue;
+      const updated = Date.parse(meta.updated_at);
+      if (Number.isNaN(updated) || updated >= cutoff) continue;
+      await this.removeArtifact(sessionId, meta.artifact_id);
+      removed.push(meta.artifact_id);
+    }
+    return removed;
+  }
+
+  /** Private: pruning is the only caller; there is no human- or agent-facing artifact delete. */
+  private async removeArtifact(sessionId: string, artifactId: string): Promise<void> {
+    await rm(artifactDir(this.baseDir, sessionId, artifactId), { recursive: true, force: true });
   }
 
   /**
@@ -276,7 +330,7 @@ export class ArtifactStore {
     if (input.type === "audio") mime = sniffAudioMime(bytes, mime);
 
     const now = new Date().toISOString();
-    const session = await this.ensureSession(input.session_id, input.session_title, now);
+    const session = await this.ensureSession(input.session_id, input.session_title, now, input.channel);
 
     const aDir = join(sessionDir(this.baseDir, input.session_id), "artifacts");
     await mkdir(aDir, { recursive: true });
@@ -304,7 +358,8 @@ export class ArtifactStore {
     atomicWriteFileSync(join(dir, "meta.json"), JSON.stringify(artifact, null, 2));
     atomicWriteBufferSync(join(dir, "blob"), bytes);
 
-    return { session, artifact, created: !existing };
+    const pruned = await this.pruneChannel(input.session_id, now, artifactId);
+    return { session, artifact, created: !existing, pruned };
   }
 
   /** Absolute path of a media artifact's snapshot blob, or null if none. */
@@ -372,6 +427,7 @@ export class ArtifactStore {
     program: string;
     artifact_id?: string;
     session_title?: string;
+    channel?: ChannelOptions;
   }): Promise<PushResult> {
     return this.pushArtifact({ ...input, content: input.program, type: "ui" });
   }
@@ -382,7 +438,7 @@ export class ArtifactStore {
 
     const now = new Date().toISOString();
     const sDir = sessionDir(this.baseDir, input.session_id);
-    const session = await this.ensureSession(input.session_id, input.session_title, now);
+    const session = await this.ensureSession(input.session_id, input.session_title, now, input.channel);
 
     const aDir = join(sDir, "artifacts");
     await mkdir(aDir, { recursive: true });
@@ -407,7 +463,8 @@ export class ArtifactStore {
     atomicWriteFileSync(join(dir, "meta.json"), JSON.stringify(artifact, null, 2));
     atomicWriteFileSync(join(dir, input.type === "chart" ? "content.json" : "content.md"), input.content);
 
-    return { session, artifact, created: !existing };
+    const pruned = await this.pruneChannel(input.session_id, now, artifactId);
+    return { session, artifact, created: !existing, pruned };
   }
 }
 
