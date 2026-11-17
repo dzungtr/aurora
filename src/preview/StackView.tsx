@@ -342,7 +342,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
                 ) : current.type === "ui" ? (
                   <div className="aur-stack3__pane-card">
                     <div className="aur-stack3__cardbox aur-ui__pane">
-                      <UiArtifact content={current.content} />
+                      <UiArtifact content={current.content} artifactId={current.artifact_id} />
                     </div>
                     <div className="aur-stack3__caption aur-stack3__captionmono">
                       push_ui · composed with the aurora component library

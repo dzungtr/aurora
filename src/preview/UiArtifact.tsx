@@ -7,8 +7,9 @@
 import { useMemo } from "react";
 import { Renderer } from "@openuidev/react-lang";
 import { auroraUiLibrary, validateUiProgram, formatUiProgramErrors } from "../../lib/openuiLibrary";
+import { ExpandProvider } from "./expandState";
 
-export function UiArtifact({ content }: { content: string }) {
+export function UiArtifact({ content, artifactId }: { content: string; artifactId: string }) {
   const errors = useMemo(() => validateUiProgram(content), [content]);
   return (
     <div className="aur-ui">
@@ -23,7 +24,9 @@ export function UiArtifact({ content }: { content: string }) {
             ))}
         </div>
       )}
-      <Renderer library={auroraUiLibrary} response={content} isStreaming={false} />
+      <ExpandProvider key={artifactId}>
+        <Renderer library={auroraUiLibrary} response={content} isStreaming={false} />
+      </ExpandProvider>
     </div>
   );
 }
