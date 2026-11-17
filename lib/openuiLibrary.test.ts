@@ -145,6 +145,93 @@ lost = Text("dropped")`;
     expect(e!.message).toContain("10,000");
   });
 
+  test("Card holds a Mermaid: no errors (validation scenario 1)", () => {
+    const src = 'root = Stack([c], "column")\nc = Card([m])\nm = Mermaid("flowchart TD\\nA-->B")';
+    expect(validateUiProgram(src)).toEqual([]);
+  });
+
+  test("Card holds Text, Chart, and Mermaid together", () => {
+    const src = [
+      'root = Stack([c], "column")',
+      "c = Card([t, ch, m])",
+      't = Text("hi")',
+      'ch = Chart("pie", {kind: "pie", points: [{label: "A", value: 1}]})',
+      'm = Mermaid("flowchart TD\\nA-->B")',
+    ].join("\n");
+    expect(validateUiProgram(src)).toEqual([]);
+  });
+
+  test("Chart inside a Card hits the same chart-contract check as standalone (scenario 2)", () => {
+    const chart = 'Chart("pie", {kind: "categorical", categories: ["a"], series: [{name: "s", values: [1]}]})';
+    const nested = validateUiProgram(`root = Stack([c], "column")\nc = Card([ch])\nch = ${chart}`);
+    const standalone = validateUiProgram(`root = Stack([ch], "column")\nch = ${chart}`);
+    const n = nested.find((x) => x.code === "chart-contract");
+    const s = standalone.find((x) => x.code === "chart-contract");
+    expect(n).toBeDefined();
+    expect(s).toBeDefined();
+    expect(n!.message).toBe(s!.message);
+    expect(n!.statementId).toBe("ch");
+    expect(n!.line).toBe(3);
+  });
+
+  test("Chart inside a Card hits the same chart-data check as standalone", () => {
+    const src = 'root = Stack([c], "column")\nc = Card([ch])\nch = Chart("pie", {kind: "pie"})';
+    const e = validateUiProgram(src).find((x) => x.code === "chart-data");
+    expect(e).toBeDefined();
+    expect(e!.statementId).toBe("ch");
+  });
+
+  test("Stack inside Card: one child-type error naming the allowed types (scenario 3)", () => {
+    const src = 'root = Stack([c], "column")\nc = Card([s])\ns = Stack([t], "row")\nt = Text("x")';
+    const errors = validateUiProgram(src).filter((x) => x.code === "child-type");
+    expect(errors).toHaveLength(1);
+    expect(errors[0].statementId).toBe("s");
+    expect(errors[0].line).toBe(3);
+    expect(errors[0].message).toContain("Text | Chart | Mermaid");
+    expect(errors[0].message).toContain("Card");
+    expect(errors[0].message).toContain("Stack");
+  });
+
+  test("Card inside Card is rejected (Card is not in Card's union)", () => {
+    const src = 'root = Stack([c], "column")\nc = Card([d])\nd = Card([t])\nt = Text("x")';
+    const errors = validateUiProgram(src).filter((x) => x.code === "child-type");
+    expect(errors).toHaveLength(1);
+    expect(errors[0].statementId).toBe("d");
+  });
+
+  test("inline out-of-union child reports the parent's statement and line", () => {
+    const src = 'root = Stack([c], "column")\nc = Card([Stack([Text("x")], "row")])';
+    const errors = validateUiProgram(src).filter((x) => x.code === "child-type");
+    expect(errors).toHaveLength(1);
+    expect(errors[0].statementId).toBe("c");
+    expect(errors[0].line).toBe(2);
+  });
+
+  test("Stack nests Stack (scenario 4)", () => {
+    const src = 'root = Stack([s], "column")\ns = Stack([t], "row")\nt = Text("x")';
+    expect(validateUiProgram(src)).toEqual([]);
+  });
+
+  test("Stack nests Stack with siblings and deeper levels", () => {
+    const src = [
+      'root = Stack([a, b], "column")',
+      'a = Stack([c], "row")',
+      'b = Stack([t2], "row")',
+      "c = Card([t1])",
+      't1 = Text("x")',
+      't2 = Text("y")',
+    ].join("\n");
+    expect(validateUiProgram(src)).toEqual([]);
+  });
+
+  test("allowed-children sets come from the JSON Schema (Card = Text | Chart | Mermaid)", () => {
+    const schema: any = auroraUiLibrary.toJSONSchema();
+    const names = (schema.$defs.Card.properties.children.items.anyOf as { $ref: string }[]).map((r) =>
+      r.$ref.split("/").pop()
+    );
+    expect(names).toEqual(["Text", "Chart", "Mermaid"]);
+  });
+
   test("formatUiProgramErrors lists every error on its own line", () => {
     const text = formatUiProgramErrors([
       { line: 3, statementId: "b", code: "unknown-component", message: "nope" },
@@ -166,9 +253,24 @@ describe("countStatements", () => {
 });
 
 describe("generated description (single source of truth)", () => {
-  test("budget: at or under the 800-token hard cap", () => {
+  test("budget: at or under the 1,300-token hard cap", () => {
     const prompt = generateUiToolDescription();
-    expect(encode(prompt).length).toBeLessThanOrEqual(800);
+    expect(encode(prompt).length).toBeLessThanOrEqual(1300);
+  });
+
+  test("strips the generic Hoisting & Important Rules sections", () => {
+    const prompt = generateUiToolDescription();
+    expect(prompt).not.toContain("## Hoisting & Streaming (CRITICAL)");
+    expect(prompt).not.toContain("## Important Rules");
+    expect(prompt).toContain("## Component Signatures");
+    expect(prompt).toContain("## Examples");
+    expect(prompt).toContain("## Final Verification");
+  });
+
+  test("signatures show Card's widened children and Stack nesting", () => {
+    const prompt = generateUiToolDescription();
+    expect(prompt).toContain("Card(children: (Text | Chart | Mermaid)[])");
+    expect(prompt).toMatch(/Stack\(.*— .*nest/i);
   });
 
   test("carries the cross-guidance line and the worked example", () => {

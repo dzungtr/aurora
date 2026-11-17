@@ -67,12 +67,19 @@ export const Mermaid = defineComponent({
   component: (p: any) => <MermaidView source={p.props.source} />,
 });
 
+/**
+ * What a Card may hold. Exported so digest cards (#90) reuse the same union;
+ * the aurora-side child-type check derives each parent's allowed set from the
+ * generated JSON Schema, so this union is the only place it is declared.
+ */
+export const CardChild = z.union([Text.ref, Chart.ref, Mermaid.ref]);
+
 /** A bordered card grouping child elements. */
 export const Card = defineComponent({
   name: "Card",
-  description: "Bordered card of Text children.",
+  description: "Bordered card.",
   props: z.object({
-    children: z.array(Text.ref).describe("Card contents"),
+    children: z.array(CardChild).describe("Card contents"),
   }),
   component: (p: any) => <div className="aur-ui__card">{p.renderNode(p.props.children)}</div>,
 });
@@ -80,7 +87,7 @@ export const Card = defineComponent({
 /** Layout container arranging children in a row or column. */
 export const Stack = defineComponent({
   name: "Stack",
-  description: "Layout container (row or column).",
+  description: "Layout container (row or column); may nest Stack.",
   props: z.object({
     children: z.array(z.union([Card.ref, Text.ref, Chart.ref, Mermaid.ref])).describe("Child elements"),
     direction: z.enum(["row", "column"]).describe("Layout direction"),
@@ -287,6 +294,10 @@ export function validateUiProgram(source: string): UiProgramError[] {
     }
   });
 
+  // The OpenUI parser does not enforce union member types on `children`
+  // (ADR-0010), so out-of-union children are rejected here.
+  errors.push(...childTypeErrors(result.root, auroraUiLibrary.toJSONSchema(), source));
+
   for (const e of result.meta.errors) {
     const line = e.statementId ? lineOfStatement(source, e.statementId) : undefined;
     errors.push({
@@ -340,6 +351,74 @@ function collectChartNodes(node: unknown, out: ParsedNode[] = []): ParsedNode[] 
   return out;
 }
 
+/** The one hand-written exception to the schema-derived allowed children: Stack nests Stack. */
+const EXTRA_ALLOWED_CHILDREN: Record<string, string[]> = { Stack: ["Stack"] };
+
+/** Allowed child type names per parent, read from the library's JSON Schema. */
+function allowedChildren(jsonSchema: unknown): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const defs = (jsonSchema as { $defs?: Record<string, any> }).$defs ?? {};
+  for (const [parent, def] of Object.entries(defs)) {
+    const items = def?.properties?.children?.items;
+    if (!items) continue;
+    const refs: { $ref?: string }[] = Array.isArray(items.anyOf) ? items.anyOf : [items];
+    const names = refs.flatMap((r) => (r.$ref ? [r.$ref.split("/").pop()!] : []));
+    out.set(parent, [...names, ...(EXTRA_ALLOWED_CHILDREN[parent] ?? [])]);
+  }
+  return out;
+}
+
+/**
+ * Walk the parsed tree; every child's typeName must be in its parent's allowed
+ * set. Reports the child's statement, or the nearest enclosing statement when
+ * the child is inline.
+ */
+function childTypeErrors(root: unknown, jsonSchema: unknown, source: string): UiProgramError[] {
+  const allowed = allowedChildren(jsonSchema);
+  const errors: UiProgramError[] = [];
+  const visit = (node: unknown, enclosingId?: string) => {
+    if (!node || typeof node !== "object") return;
+    const n = node as ParsedNode;
+    const children = n.props?.children;
+    if (n.type !== "element" || !Array.isArray(children)) return;
+    const parentId = n.statementId ?? enclosingId;
+    const allowedNames = n.typeName ? allowed.get(n.typeName) : undefined;
+    for (const child of children) {
+      const c = child as ParsedNode | null;
+      if (!c || typeof c !== "object" || c.type !== "element") continue;
+      if (allowedNames && c.typeName && !allowedNames.includes(c.typeName)) {
+        const id = c.statementId ?? parentId;
+        errors.push({
+          line: id ? lineOfStatement(source, id) : undefined,
+          statementId: id,
+          code: "child-type",
+          message: `${n.typeName} children must be ${allowedNames.join(" | ")}; got ${c.typeName}.`,
+        });
+      }
+      visit(c, parentId);
+    }
+  };
+  visit(root);
+  return errors;
+}
+
+/**
+ * Remove a generated-prompt section: from its exact `## ` heading up to (not
+ * including) the next `## ` heading, or the end of the text.
+ */
+function stripSection(prompt: string, heading: string): string {
+  const out: string[] = [];
+  let skipping = false;
+  for (const line of prompt.split("\n")) {
+    if (line.startsWith("## ")) skipping = line === heading;
+    if (!skipping) out.push(line);
+  }
+  return out.join("\n");
+}
+
+/** Generic sections of the generated prompt that push_ui drops to stay within budget. */
+const STRIPPED_SECTIONS = ["## Hoisting & Streaming (CRITICAL)", "## Important Rules"];
+
 /**
  * Worked example embedded in the generated description (single source of
  * truth with validation — the example must parse cleanly against this
@@ -355,21 +434,19 @@ export const PUSH_UI_CROSS_GUIDANCE =
 
 /**
  * Generate the push_ui tool description from the library definition itself.
- * Budget: target ~600 tokens, hard cap 800 (spec #37); enforced by test.
+ * Two generic sections of the generated prompt are removed (STRIPPED_SECTIONS)
+ * to make room for the component set. Hard cap 1,300 tokens (#86); enforced by test.
  */
 export function generateUiToolDescription(): string {
-  return (
-    generateSystemPrompt({
-      library: auroraUiLibrary.toSpec(),
-      promptOptions: {
-        toolCalls: false,
-        bindings: false,
-        editMode: false,
-        inlineMode: false,
-        examples: [WORKED_EXAMPLE],
-      },
-    }) +
-    "\n\n" +
-    PUSH_UI_CROSS_GUIDANCE
-  );
+  const generated = generateSystemPrompt({
+    library: auroraUiLibrary.toSpec(),
+    promptOptions: {
+      toolCalls: false,
+      bindings: false,
+      editMode: false,
+      inlineMode: false,
+      examples: [WORKED_EXAMPLE],
+    },
+  });
+  return STRIPPED_SECTIONS.reduce(stripSection, generated) + "\n\n" + PUSH_UI_CROSS_GUIDANCE;
 }
