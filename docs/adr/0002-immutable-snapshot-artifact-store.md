@@ -8,4 +8,4 @@ _Pointers only — current decision above. Fallback `git log -p` on this file._
 
 | Date | PR | Change |
 |---|---|---|
-| 2026-11-17 | docs PR for #86 | No-TTL rule scoped to ordinary sessions; channel sessions prune by retention (ADR-0009). |
+| 2026-11-17 | #87 | No-TTL rule scoped to ordinary sessions; channel sessions prune by retention (ADR-0009). |
