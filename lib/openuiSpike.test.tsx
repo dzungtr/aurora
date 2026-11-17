@@ -141,7 +141,8 @@ m1 = Mermaid("graph TD; A-->B")`,
       },
     });
     const tokens = encode(prompt).length;
-    // Budget measured and recorded in #37's handoffs; hard cap is 800.
+    // Spike-time budget for this throwaway library. The shipped push_ui cap is
+    // 1,300 tokens (lib/openuiLibrary.test.ts, #86).
     expect(tokens).toBeLessThanOrEqual(800);
   });
 });
