@@ -10,10 +10,15 @@ const GLYPHS = {
   right: "M9 6l6 6-6 6",
   external: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
   why: "M15 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM5 20a7 7 0 0 1 14 0M16 17l2 2 3-3",
+  // Briefing frame glyphs (issue #91)
+  checkCircle: "M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3",
+  clock: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6v6l4 2",
+  circle: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z",
+  thread: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
 } as const;
 
 /** Inline SVG glyph — bundled with the page so expand/collapse never triggers an icon fetch. */
-function Icon({ name, size = 14, className }: { name: keyof typeof GLYPHS; size?: number; className?: string }) {
+export function Icon({ name, size = 14, className }: { name: keyof typeof GLYPHS; size?: number; className?: string }) {
   return (
     <svg
       className={className}
