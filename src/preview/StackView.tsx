@@ -10,7 +10,6 @@ import {
   previewApi,
   previewUrl,
   navigate,
-  onRouteChange,
   type SessionWithCount,
 } from "./previewApi";
 import { onArtifactEvent } from "./liveSocket";
@@ -94,10 +93,6 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
     const next = artifacts[index + delta];
     if (next) navigate(previewUrl(sessionId, next.artifact_id));
   };
-  // Re-render on popstate / in-app navigate so prev/next stay in sync.
-  const [, setTick] = useState(0);
-  useEffect(() => onRouteChange(() => setTick((t) => t + 1)), []);
-
   const toggleSidebar = (side: keyof SidebarState) => setSidebar({ [side]: !sidebar[side] });
 
   const copyLink = () => {
