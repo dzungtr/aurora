@@ -1,4 +1,4 @@
-// Pure Feed logic (spec #98 M4, M5, M8): which sessions are tabs, which tab a
+// Pure Feed logic (spec #98 M4, M5, M8, M15): which sessions are tabs, which tab a
 // bare Feed route opens, what "live" means, and which state the view is in.
 
 export const FEED_LIVE_WINDOW_MS = 15 * 60 * 1000;
@@ -21,6 +21,35 @@ export function resolveFeedChannel(tabs: { session_id: string }[], lastViewed: s
 export function isLive(iso: string, now: number): boolean {
   const age = now - Date.parse(iso);
   return age >= 0 && age <= FEED_LIVE_WINDOW_MS;
+}
+
+const DAY_MS = 86_400_000;
+
+/** Start of the viewer's local calendar day containing `ms`. */
+function localDayStart(ms: number): number {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** D18: archived iff `updated_at` falls on an earlier local calendar day than
+ * the newest `updated_at` in `all`. False for an empty list or a bad date. */
+export function isArchived(meta: { updated_at: string }, all: { updated_at: string }[]): boolean {
+  const own = Date.parse(meta.updated_at);
+  if (Number.isNaN(own)) return false;
+  let newest = -Infinity;
+  for (const a of all) {
+    const t = Date.parse(a.updated_at);
+    if (t > newest) newest = t;
+  }
+  if (newest === -Infinity) return false;
+  return localDayStart(own) < localDayStart(newest);
+}
+
+/** When an artifact becomes eligible for pruning. Mirrors the store cutoff
+ * (`updated_at < now - retention_days * 86_400_000`); pruning itself only
+ * happens on a later push into the channel (ADR-0009). */
+export function pruneEligibleAt(updatedAt: string, retentionDays: number): Date {
+  return new Date(Date.parse(updatedAt) + retentionDays * DAY_MS);
 }
 
 /** Feed nav badge (D15): unread summed over channel sessions only. */
