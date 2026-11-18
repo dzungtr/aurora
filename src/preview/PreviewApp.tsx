@@ -3,6 +3,7 @@
 
 import { useEffect } from "react";
 import { parsePreviewPath } from "./previewApi";
+import { useRoutePathname } from "./useRoutePathname";
 import { SessionList } from "./SessionList";
 import { StackView } from "./StackView";
 import { LiveToast } from "./LiveToast";
@@ -13,10 +14,11 @@ import { rootPalette, usePalette } from "../lib/paletteStore";
 export function PreviewApp() {
   const theme = useTheme();
   const palette = usePalette();
-  const route = parsePreviewPath(window.location.pathname);
+  const route = parsePreviewPath(useRoutePathname());
   const viewing = route?.sid ?? null;
   // Record which session (if any) is open so unread counts stop accruing for
-  // it; PreviewApp is re-keyed on every navigate, so this runs per mount.
+  // it. useRoutePathname re-renders on every navigation, so the StackView key
+  // below changes and remounts it.
   useEffect(() => setViewingSession(viewing), [viewing]);
   const surface = viewing ? <StackView key={`${viewing}/${route!.aid ?? ""}`} sessionId={viewing} artifactId={route!.aid} /> : <SessionList />;
   return (
