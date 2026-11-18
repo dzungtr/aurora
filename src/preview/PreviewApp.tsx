@@ -8,9 +8,11 @@ import { StackView } from "./StackView";
 import { LiveToast } from "./LiveToast";
 import { setViewingSession } from "./unreadStore";
 import { useTheme } from "../lib/themeStore";
+import { rootPalette, usePalette } from "../lib/paletteStore";
 
 export function PreviewApp() {
   const theme = useTheme();
+  const palette = usePalette();
   const route = parsePreviewPath(window.location.pathname);
   const viewing = route?.sid ?? null;
   // Record which session (if any) is open so unread counts stop accruing for
@@ -18,7 +20,7 @@ export function PreviewApp() {
   useEffect(() => setViewingSession(viewing), [viewing]);
   const surface = viewing ? <StackView key={`${viewing}/${route!.aid ?? ""}`} sessionId={viewing} artifactId={route!.aid} /> : <SessionList />;
   return (
-    <div className="aur" data-theme={theme}>
+    <div className="aur" data-theme={theme} data-palette={rootPalette(theme, palette)}>
       {surface}
       {/* Pushes to other sessions surface as a badge/toast, never a navigation. */}
       <LiveToast viewingSessionId={viewing ?? undefined} />

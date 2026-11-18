@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { SESSION_ROUTE_PREFIX } from "../../lib/routePaths";
+import { PalettePicker } from "../components/PalettePicker";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { totalUnread, useUnreadCounts } from "./unreadStore";
 
@@ -39,6 +40,7 @@ export function PreviewTopBar() {
 
       <div className="aur-spacer" />
 
+      <PalettePicker />
       <ThemeToggle />
 
       <div className="aur-conn">
