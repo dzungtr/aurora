@@ -21,6 +21,21 @@ The mockup's inline styles are mockup mechanics. Aurora renderers use classes in
 | 479–679 | Sample briefing data for four topics | Fixture material for tests |
 | 829–858 | The OpenUI program the mockup implies | Shape reference only — aurora's syntax is positional (see the generated `push_ui` description) |
 
-## Out of scope (spec #86, D11)
+## Feed chrome (spec #98)
 
-Top bar nav, topic tabs (lines 107–130), briefing toolbar (138–149), archived-day view (154–167), channel-stack aside (399–424), program drawer (426–454), toast/simulate controls (457–472), and the light palette picker. Do not build these.
+Spec #86 (D11) left the chrome around the briefing unbuilt. Epic #97 / spec #98 builds it as the **Feed** (`/feed/<channel>`), plus the light palette picker.
+
+| Lines | Region | Spec #98 |
+|---|---|---|
+| 73–82 | Top-bar nav: Feed / Artifacts | D15 |
+| 86–93, 692–702, 913–924 | Light palette picker and `PALETTES` | D11, ADR-0012 |
+| 107–130 | Channel tabs (the per-topic icons and labels are not followed) | D1, D2, D4, D16 |
+| 138–149 | Toolbar: Live, Program, Copy link | D7, D23 |
+| 154–167 | Archived day (placeholder not followed — the real artifact renders under a banner) | D6, D18 |
+| 399–424 | Channel stack aside (the "kept · patches" line is not followed) | D9 |
+| 426–454 | Program drawer (syntax colouring not followed) | D8 |
+| 457–466 | Toast | D20 |
+
+## Out of scope
+
+The "Simulate agent patch" button (lines 468–472) is a mockup control. Do not build it.

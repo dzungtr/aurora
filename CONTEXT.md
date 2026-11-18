@@ -29,8 +29,12 @@ _Avoid_: cache, copy, blob
 ### Rendering
 
 **House theme**:
-The single styling definition (ECharts theme JSON, markdown/mermaid styling) applied to every artifact. Agents never control styling.
+The single styling definition (ECharts theme JSON, markdown/mermaid styling) applied to every artifact. Agents never control styling. Dark mode has one look; light mode offers viewer-chosen palettes (ADR-0012).
 _Avoid_: skin, template
+
+**Palette**:
+One of the named light-mode colour sets (Paper, Broadsheet, Slate & coral, Cobalt & tangerine) the viewer picks in the top bar. A per-browser preference — never set by an agent, never stored with an artifact.
+_Avoid_: theme, skin, colour scheme
 
 **Chart contract**:
 The per-`chart_type` data shape accepted by `push_chart`, translated to chart-lib options by a pure function.
@@ -57,7 +61,7 @@ _Avoid_: diff, delta, partial update
 
 **Channel**:
 A session the agent declared with `session_kind: "channel"`: durable, re-opened by the same agent-minted id across days, pinned in the session list, and pruned by its retention on every push (ADR-0009).
-_Avoid_: feed, topic, inbox
+_Avoid_: topic, inbox
 
 **Retention**:
 A channel's `retention_days`; artifacts whose `updated_at` is older are deleted on the next push into that channel.
@@ -78,6 +82,20 @@ _Avoid_: size, style, layout
 **Handle**:
 An agent-minted, program-unique label (`story_id` on a `DigestCard`, `thread_id` on a `ThreadUpdate`) used in chat references and as the patch anchor. Not looked up server-side.
 _Avoid_: key, slug, item id
+
+### Feed
+
+**Feed**:
+The browser reading surface at `/feed` that shows every channel as a tab and one channel's stack at a time. A surface, not data: there is no feed object in the store or on MCP, and a single channel, stack or briefing is never "a feed" (ADR-0011).
+_Avoid_: timeline, home, newspaper view
+
+**Tab**:
+A channel's entry in the Feed, labelled with the channel id verbatim and ordered alphabetically.
+_Avoid_: topic, section
+
+**Archived**:
+A Feed display state for a channel artifact last updated on an earlier day than the channel's newest artifact. It is still the real artifact, shown under a banner, until retention prunes it.
+_Avoid_: frozen, expired, placeholder
 
 ### Agent read surface
 
@@ -100,7 +118,7 @@ The WebSocket channel broadcasting thin push/update events; clients refetch cont
 _Avoid_: notifier, push channel
 
 **Deep link**:
-`/s/<session_id>` URL returned in every tool response so agents can surface a clickable link in the TUI.
+`/s/<session_id>` URL returned in every tool response so agents can surface a clickable link in the TUI. Feed URLs (`/feed/...`) are browser-only and never returned by a tool (ADR-0011).
 _Avoid_: preview link (retired — `/preview/*` is dead, ADR-0007)
 
 **Session mount**:
@@ -108,7 +126,7 @@ Clicking a session in the session list scopes the artifact view to that session 
 _Avoid_: open folder, navigate into
 
 **Auto-advance**:
-Behavior where a viewed session's stack advances to a newly pushed artifact. Never navigates the user away from a different session — that gets a badge.
+Behavior where a viewed session's stack advances to a newly pushed artifact. Never navigates the user away from a different session — that gets a badge. The toggle is labelled "Follow latest" in the stack view and "Live" in the Feed; it is one preference per session.
 
 ### Generation
 
