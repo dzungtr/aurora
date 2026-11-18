@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { chartToOption, type ChartContract } from "./chartToOption";
 import { useTheme } from "../lib/themeStore";
+import { usePalette } from "../lib/paletteStore";
 
 export type { ChartContract };
 
@@ -19,19 +20,20 @@ export function parseChartContract(content: string): ChartContract {
 export function ChartView({ contract }: { contract: ChartContract }) {
   const ref = useRef<HTMLDivElement>(null);
   const theme = useTheme();
+  const palette = usePalette();
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const chart = echarts.init(el);
-    chart.setOption(chartToOption(contract, theme));
+    chart.setOption(chartToOption(contract, theme, palette));
     const onResize = () => chart.resize();
     window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("resize", onResize);
       chart.dispose();
     };
-  }, [contract, theme]);
+  }, [contract, theme, palette]);
 
   return <div className="aur-chart" ref={ref} />;
 }

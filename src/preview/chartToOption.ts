@@ -7,6 +7,7 @@ import type { EChartsOption } from "echarts";
 import type { ChartType, ChartData } from "../../lib/chartContract";
 import darkTheme from "./chartTheme.json";
 import lightTheme from "./chartTheme.light.json";
+import { PALETTES, type PaletteId } from "../lib/paletteStore";
 
 export interface ChartContract {
   chart_type: ChartType;
@@ -16,8 +17,11 @@ export interface ChartContract {
 export type ChartThemeName = "light" | "dark";
 type ChartTheme = typeof darkTheme;
 
-function themeFor(name: ChartThemeName): ChartTheme {
-  return name === "light" ? lightTheme : darkTheme;
+// A palette only recolours the light theme; dark output never depends on it.
+function themeFor(name: ChartThemeName, palette?: PaletteId): ChartTheme {
+  if (name !== "light") return darkTheme;
+  const colors = palette ? PALETTES[palette].chart : null;
+  return colors ? { ...lightTheme, colors } : lightTheme;
 }
 
 function baseOption(theme: ChartTheme): EChartsOption {
@@ -69,9 +73,13 @@ function valueAxes(theme: ChartTheme) {
   ];
 }
 
-export function chartToOption(contract: ChartContract, themeName: ChartThemeName = "dark"): EChartsOption {
+export function chartToOption(
+  contract: ChartContract,
+  themeName: ChartThemeName = "dark",
+  palette?: PaletteId,
+): EChartsOption {
   const { chart_type, data } = contract;
-  const theme = themeFor(themeName);
+  const theme = themeFor(themeName, palette);
   const option = baseOption(theme);
 
   switch (chart_type) {
