@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { FEED_LIVE_WINDOW_MS, feedTabs, isLive, resolveFeedChannel } from "./feedModel";
+import { FEED_LIVE_WINDOW_MS, feedTabs, fmtUpdated, isLive, resolveFeedChannel, toastViewPath } from "./feedModel";
 
 const s = (session_id: string, kind?: "channel") => ({ session_id, kind });
 
@@ -58,5 +58,40 @@ describe("isLive", () => {
   });
   test("false for unparseable input", () => {
     expect(isLive("nope", now)).toBe(false);
+  });
+});
+
+describe("toastViewPath", () => {
+  const channels = [{ session_id: "feed-tech" }, { session_id: "feed-business" }];
+
+  test("feed surface and a channel opens the channel's Feed tab", () => {
+    expect(toastViewPath("feed", "feed-business", channels)).toBe("/feed/feed-business");
+  });
+
+  test("feed surface and an ordinary session opens the stack view", () => {
+    expect(toastViewPath("feed", "scratch", channels)).toBe("/s/scratch");
+  });
+
+  test("stack surface keeps stack links, even for a channel", () => {
+    expect(toastViewPath("stack", "feed-tech", channels)).toBe("/s/feed-tech");
+  });
+
+  test("feed surface before the channel list has loaded falls back to the stack view", () => {
+    expect(toastViewPath("feed", "feed-tech", null)).toBe("/s/feed-tech");
+  });
+
+  test("encodes the session id", () => {
+    expect(toastViewPath("feed", "a b", [{ session_id: "a b" }])).toBe("/feed/a%20b");
+  });
+});
+
+describe("fmtUpdated", () => {
+  test("zero-padded 24-hour HH:MM in local time", () => {
+    expect(fmtUpdated(new Date(2026, 10, 18, 9, 5, 30).toISOString())).toBe("09:05");
+    expect(fmtUpdated(new Date(2026, 10, 18, 17, 42).toISOString())).toBe("17:42");
+  });
+
+  test("empty string for unparseable input", () => {
+    expect(fmtUpdated("nope")).toBe("");
   });
 });

@@ -30,7 +30,7 @@ export function PreviewApp() {
     <div className="aur" data-theme={theme} data-palette={rootPalette(theme, palette)}>
       {surface}
       {/* Pushes to other sessions surface as a badge/toast, never a navigation. */}
-      <LiveToast viewingSessionId={viewing ?? undefined} />
+      <LiveToast viewingSessionId={viewing ?? undefined} surface={feedRoute ? "feed" : "stack"} />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 // The Feed (spec #98, ADR-0011): channels as tabs, the open channel's latest
 // (or deep-linked) artifact as a full-width page. Mount points for later
-// slices are marked below: toolbar actions (#101), aside / banner (#102),
-// drawer (#103).
+// slices are marked below: aside / banner (#102), drawer (#103). The toolbar
+// lives in FeedToolbar.tsx (#101).
 
 import { useEffect, useState, type MouseEvent } from "react";
 import { Icon } from "../components/Icon";
@@ -13,9 +13,8 @@ import { useChannels, useSessions } from "./channelStore";
 import { feedViewState, isLive } from "./feedModel";
 import { getLastFeedChannel, setLastFeedChannel } from "./feedLastStore";
 import { navigate, previewUrl, type SessionWithCount } from "./previewApi";
-import { typeMeta } from "./StackView";
+import { FeedToolbar } from "./FeedToolbar";
 import { useUnreadCounts, type UnreadCounts } from "./unreadStore";
-import { useTheme } from "../lib/themeStore";
 
 const TICK_MS = 60_000;
 
@@ -86,21 +85,11 @@ export function FeedEmpty() {
 }
 
 function FeedStage({ sessionId, artifactId }: { sessionId: string; artifactId?: string }) {
-  const theme = useTheme();
   // feedPath is a module-level function: a stable reference for the hook's effect deps.
-  const { artifacts, current, error } = useArtifactStack({ sessionId, artifactId, urlFor: feedPath });
-  const t = current ? typeMeta(current.type, theme) : null;
+  const { artifacts, current, error, follow, toggleFollow } = useArtifactStack({ sessionId, artifactId, urlFor: feedPath });
   return (
     <>
-      {current && t && (
-        <div className="aur-feed__toolbar">
-          <span className="aur-stack3__typechip" style={{ background: t.color + "22", color: t.color }}>
-            <Icon name={t.icon} size={13} /> {t.label}
-          </span>
-          <span className="aur-stack3__artifacttitle">{current.title}</span>
-          {/* #101 mounts the Live / Copy link buttons here, after the title; #103 adds Program. */}
-        </div>
-      )}
+      <FeedToolbar sessionId={sessionId} current={current} follow={follow} onToggleFollow={toggleFollow} />
       <div className="aur-feed__stage">
         {error && <p className="aur-preview__error">{error}</p>}
         {!error && artifacts === null && <p className="aur-preview__empty">Loading…</p>}

@@ -653,6 +653,10 @@
 .aur-feed__body { flex: 1; display: flex; min-height: 0; overflow: hidden; position: relative; }
 .aur-feed__center { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--e0); position: relative; }
 .aur-feed__toolbar { height: 46px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+.aur-feed__toolbar .aur-stack3__artifacttitle { flex: 0 1 auto; }
+.aur-feed__toolbar a.aur-stack3__ghostbtn { text-decoration: none; }
+.aur-feed__toolbarfill { flex: 1 1 0; min-width: 0; }
+.aur-feed__updated { flex: none; font-size: 11.5px; color: var(--text-light); white-space: nowrap; }
 .aur-feed__stage { flex: 1; min-height: 0; overflow: auto; position: relative; }
 .aur-feed__center > .aur-preview__empty { padding: 32px; }
 .aur-feed__notice, .aur-feed__empty { padding: 32px; max-width: 760px; color: var(--text-body); }
