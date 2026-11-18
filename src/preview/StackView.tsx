@@ -2,28 +2,22 @@
 // unread badges), center (session header + artifact toolbar + content
 // stage), right artifact stack (newest-on-top). Missing artifact id resolves
 // to the latest (highest seq). Content renderers (ChartView, MermaidArtifact,
-// MediaArtifact, MarkdownArtifact) are reused unchanged inside the stage.
+// MediaArtifact, MarkdownArtifact) are reused unchanged inside the stage via
+// ArtifactStage; list/current/live logic comes from useArtifactStack.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   previewApi,
-  latestOf,
   previewUrl,
   navigate,
   onRouteChange,
-  type Artifact,
-  type ArtifactMeta,
   type SessionWithCount,
 } from "./previewApi";
 import { onArtifactEvent } from "./liveSocket";
-import { MarkdownArtifact } from "./MarkdownArtifact";
-import { ChartView, parseChartContract, type ChartContract } from "./ChartView";
-import { MediaArtifact } from "./MediaArtifact";
-import { MermaidArtifact } from "./MermaidArtifact";
-import { UiArtifact } from "./UiArtifact";
+import { ArtifactStage } from "./ArtifactStage";
+import { useArtifactStack } from "./useArtifactStack";
 import { Icon } from "../components/Icon";
 import { PreviewTopBar } from "./PreviewTopBar";
-import { getFollow, setFollow } from "./followStore";
 import { getSidebar, setSidebar, subscribeSidebar, type SidebarState } from "./sidebarStore";
 import { useUnreadCounts } from "./unreadStore";
 import { useTheme, type Theme } from "../lib/themeStore";
@@ -66,31 +60,22 @@ function fmtTime(iso: string): string {
   return Number.isNaN(t.getTime()) ? "" : t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-/** Parse a chart contract, or null when the payload isn't a valid chart. */
-function parseChartSafe(content: string): ChartContract | null {
-  try {
-    return parseChartContract(content);
-  } catch {
-    return null;
-  }
-}
-
 export function StackView({ sessionId, artifactId }: StackViewProps) {
   const [sessions, setSessions] = useState<SessionWithCount[] | null>(null);
-  const [artifacts, setArtifacts] = useState<ArtifactMeta[] | null>(null);
-  const [current, setCurrent] = useState<Artifact | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [follow, setFollowState] = useState(() => getFollow(sessionId));
+  const { artifacts, current, error, follow, toggleFollow } = useArtifactStack({
+    sessionId,
+    artifactId,
+    urlFor: previewUrl,
+  });
   const [copied, setCopied] = useState(false);
   const [sidebar, setSidebarState] = useState<SidebarState>(() => getSidebar());
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const aliveRef = useRef(true);
   const unread = useUnreadCounts();
   const theme = useTheme();
   // Keep the sidebar toggles in sync with the persisted store (module-level
   // singleton — this component is re-keyed on every navigation).
   useEffect(() => subscribeSidebar(() => setSidebarState(getSidebar())), []);
-  useEffect(() => () => { aliveRef.current = false; clearTimeout(copyTimer.current); }, []);
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
 
   // All sessions, for the left rail. Refreshed on every live event so counts
   // and last-activity stay current without a reload.
@@ -103,30 +88,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
     return () => { alive = false; unsub(); };
   }, []);
 
-  // Resolve the effective artifact id: deep-link id, else latest.
-  const effectiveId = useMemo(() => artifactId ?? latestOf(artifacts ?? [])?.artifact_id, [artifactId, artifacts]);
-
-  useEffect(() => {
-    let alive = true;
-    previewApi
-      .listArtifacts(sessionId)
-      .then((list) => alive && setArtifacts(list))
-      .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
-    return () => { alive = false; };
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (!effectiveId) { setCurrent(null); return; }
-    let alive = true;
-    previewApi
-      .getArtifact(sessionId, effectiveId)
-      .then((a) => alive && setCurrent(a))
-      .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
-    return () => { alive = false; };
-  }, [sessionId, effectiveId]);
-
   const index = current ? artifacts?.findIndex((a) => a.artifact_id === current.artifact_id) ?? -1 : -1;
-  const chart = current?.type === "chart" ? parseChartSafe(current.content) : null;
   const go = (delta: number) => {
     if (!artifacts || index < 0) return;
     const next = artifacts[index + delta];
@@ -136,48 +98,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
   const [, setTick] = useState(0);
   useEffect(() => onRouteChange(() => setTick((t) => t + 1)), []);
 
-  // Live updates: a push to this session slides onto the stack; auto-advance
-  // to it only when "Follow latest" is on. An in-place replace always
-  // refreshes the stack meta, and refetches the open artifact's content when
-  // it's the one that was replaced.
-  useEffect(() => {
-    return onArtifactEvent((evt) => {
-      if (evt.session_id !== sessionId) return;
-      if (evt.event === "pushed") {
-        previewApi
-          .listArtifacts(sessionId)
-          .then((list) => {
-            if (!aliveRef.current) return;
-            setArtifacts(list);
-            if (follow) {
-              const latest = latestOf(list);
-              if (latest) navigate(previewUrl(sessionId, latest.artifact_id));
-            }
-          })
-          .catch(() => {});
-      } else {
-        previewApi
-          .listArtifacts(sessionId)
-          .then((list) => aliveRef.current && setArtifacts(list))
-          .catch(() => {});
-        if (!current || evt.artifact_id === current.artifact_id) {
-          const id = evt.artifact_id;
-          previewApi
-            .getArtifact(sessionId, id)
-            .then((a) => aliveRef.current && setCurrent(a))
-            .catch(() => {});
-        }
-      }
-    });
-  }, [sessionId, current, follow]);
-
   const toggleSidebar = (side: keyof SidebarState) => setSidebar({ [side]: !sidebar[side] });
-
-  const toggleFollow = () => {
-    const next = !follow;
-    setFollow(sessionId, next);
-    setFollowState(next);
-  };
 
   const copyLink = () => {
     if (!current) return;
@@ -307,57 +228,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
 
             {current && (
               <div className="aur-stack3__stageinner">
-                {current.type === "markdown" ? (
-                  <div className="aur-stack3__pane-md">
-                    <MarkdownArtifact content={current.content} />
-                  </div>
-                ) : current.type === "chart" ? (
-                  <div className="aur-stack3__pane-card">
-                    <div className="aur-stack3__cardbox">
-                      {chart ? (
-                        <ChartView contract={chart} />
-                      ) : (
-                        <p className="aur-preview__error">Invalid chart artifact — malformed contract JSON.</p>
-                      )}
-                    </div>
-                    {chart && (
-                      <div className="aur-stack3__caption">
-                        <span className="aur-stack3__captionmono">push_chart</span>
-                        <span className="aur-stack3__dot" />
-                        <span>chart_type: <span className="aur-stack3__captionmono">{chart.chart_type}</span></span>
-                        <span className="aur-stack3__dot" />
-                        <span>Aurora house theme</span>
-                      </div>
-                    )}
-                  </div>
-                ) : current.type === "mermaid" ? (
-                  <div className="aur-stack3__pane-card">
-                    <div className="aur-stack3__cardbox aur-stack3__cardbox--center">
-                      <MermaidArtifact content={current.content} />
-                    </div>
-                    <div className="aur-stack3__caption aur-stack3__captionmono">
-                      push_mermaid · rendered client-side, house theme
-                    </div>
-                  </div>
-                ) : current.type === "ui" ? (
-                  <div className="aur-stack3__pane-card">
-                    <div className="aur-stack3__cardbox aur-ui__pane">
-                      <UiArtifact content={current.content} artifactId={current.artifact_id} />
-                    </div>
-                    <div className="aur-stack3__caption aur-stack3__captionmono">
-                      push_ui · composed with the aurora component library
-                    </div>
-                  </div>
-                ) : current.type === "image" || current.type === "video" || current.type === "audio" ? (
-                  <div className="aur-stack3__pane-card">
-                    <div className={"aur-stack3__cardbox" + (current.type === "video" ? " aur-stack3__cardbox--video" : "")}>
-                      <MediaArtifact artifact={current} />
-                    </div>
-                    <div className="aur-stack3__caption aur-stack3__captionmono">
-                      {current.type === "image" ? "push_image" : current.type === "video" ? "push_video" : "push_audio"}
-                    </div>
-                  </div>
-                ) : null}
+                <ArtifactStage artifact={current} frame="card" />
               </div>
             )}
           </div>
