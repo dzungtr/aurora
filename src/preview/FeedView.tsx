@@ -1,9 +1,10 @@
 // The Feed (spec #98, ADR-0011): channels as tabs, the open channel's latest
 // (or deep-linked) artifact as a full-width page. Mount points for later
-// slices are marked below: aside / banner (#102), drawer (#103). The toolbar
+// slices are marked below: aside / banner (#102). The drawer (#103) mounts in
+// FeedStage, inside the centre column. The toolbar
 // lives in FeedToolbar.tsx (#101).
 
-import { useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { Icon } from "../components/Icon";
 import { feedPath, SESSION_ROUTE_PREFIX } from "../../lib/routePaths";
 import { PreviewTopBar } from "./PreviewTopBar";
@@ -15,6 +16,7 @@ import { feedViewState, isArchived, isLive } from "./feedModel";
 import { getLastFeedChannel, setLastFeedChannel } from "./feedLastStore";
 import { navigate, previewUrl, type SessionWithCount } from "./previewApi";
 import { FeedToolbar } from "./FeedToolbar";
+import { ProgramDrawer } from "./ProgramDrawer";
 import { useUnreadCounts, type UnreadCounts } from "./unreadStore";
 
 const TICK_MS = 60_000;
@@ -88,9 +90,22 @@ export function FeedEmpty() {
 function FeedStage({ sessionId, artifactId, retentionDays }: { sessionId: string; artifactId?: string; retentionDays?: number }) {
   // feedPath is a module-level function: a stable reference for the hook's effect deps.
   const { artifacts, current, error, follow, toggleFollow } = useArtifactStack({ sessionId, artifactId, urlFor: feedPath });
+  // Deliberately component state, not a store: it must reset when the open artifact changes.
+  const [programOpen, setProgramOpen] = useState(false);
+  const currentId = current?.artifact_id;
+  useEffect(() => setProgramOpen(false), [currentId]);
+  const closeProgram = useCallback(() => setProgramOpen(false), []);
+  const showProgram = programOpen && current?.type === "ui";
   return (
     <>
-      <FeedToolbar sessionId={sessionId} current={current} follow={follow} onToggleFollow={toggleFollow} />
+      <FeedToolbar
+        sessionId={sessionId}
+        current={current}
+        follow={follow}
+        onToggleFollow={toggleFollow}
+        programOpen={showProgram}
+        onToggleProgram={() => setProgramOpen((o) => !o)}
+      />
       {current && artifacts && isArchived(current, artifacts) && (
         <ArchivedBanner artifact={current} sessionId={sessionId} retentionDays={retentionDays ?? DEFAULT_RETENTION_DAYS} />
       )}
@@ -106,6 +121,7 @@ function FeedStage({ sessionId, artifactId, retentionDays }: { sessionId: string
           </div>
         )}
       </div>
+      {showProgram && current && <ProgramDrawer source={current.content} onClose={closeProgram} />}
     </>
   );
 }
@@ -162,7 +178,7 @@ export function FeedView({ sessionId, artifactId }: FeedViewProps) {
         onSelect={(id) => navigate(feedPath(id))}
       />
       <div className="aur-feed__body">
-        {/* Centre column: the drawer (#103) anchors to this column's right edge. */}
+        {/* Centre column: the Program drawer anchors to this column's right edge. */}
         <main className="aur-feed__center">{body}</main>
         {state.kind === "channel" && (
           <FeedAside sessionId={state.sid} artifactId={artifactId} retentionDays={meta?.retention_days} now={now} />

@@ -15,11 +15,14 @@ export interface FeedToolbarProps {
   current: Artifact | null;
   follow: boolean;
   onToggleFollow: () => void;
+  /** Program drawer state lives in FeedStage so it can reset on artifact change. */
+  programOpen: boolean;
+  onToggleProgram: () => void;
 }
 
 const COPIED_MS = 1400;
 
-export function FeedToolbar({ sessionId, current, follow, onToggleFollow }: FeedToolbarProps) {
+export function FeedToolbar({ sessionId, current, follow, onToggleFollow, programOpen, onToggleProgram }: FeedToolbarProps) {
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -61,7 +64,14 @@ export function FeedToolbar({ sessionId, current, follow, onToggleFollow }: Feed
       >
         <Icon name={follow ? "uil:play-circle" : "uil:pause-circle"} size={15} /> Live
       </button>
-      {/* #103 adds the Program button here, between Live and Copy link. */}
+      <button
+        className={"aur-stack3__ghostbtn" + (programOpen ? " is-on" : "")}
+        onClick={onToggleProgram}
+        disabled={current?.type !== "ui"}
+        title="Show the OpenUI program"
+      >
+        <Icon name="uil:brackets-curly" size={15} /> Program
+      </button>
       <button className="aur-stack3__ghostbtn" onClick={copyLink} disabled={!current}>
         <Icon name={copied ? "uil:check" : "uil:link"} size={15} /> {copied ? "Copied" : "Copy link"}
       </button>
