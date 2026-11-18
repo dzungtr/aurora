@@ -62,7 +62,7 @@ describe("GET /api/preview/sessions/:sid/artifacts", () => {
 });
 
 describe("SPA page routes serve the shell, preview routes 404", () => {
-  it.each(["/", "/s/routes-sess", "/s/routes-sess/a1"])(
+  it.each(["/", "/s/routes-sess", "/s/routes-sess/a1", "/feed", "/feed/routes-sess", "/feed/routes-sess/a1"])(
     "serves index HTML for %s",
     async (path) => {
       const res = await fetch(`${base}${path}`);

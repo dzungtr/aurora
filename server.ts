@@ -6,7 +6,7 @@ import { LiveBus } from "./lib/liveBus";
 import { handleMcpRequest, type GenerationOptions } from "./lib/mcpSurface";
 import { loadPublicUrl } from "./lib/whitelist";
 import { OpenRouterClient, priceHintForEntry, videoPriceHintForEntry } from "./lib/openrouter";
-import { SESSION_ROUTE_PREFIX } from "./lib/routePaths";
+import { SESSION_ROUTE_PREFIX, FEED_ROUTE_PREFIX } from "./lib/routePaths";
 import { JobRegistry } from "./lib/jobRegistry";
 import { VideoJobService } from "./lib/videoGeneration";
 
@@ -135,6 +135,10 @@ export function createServer(port: number, options: ServerOptions = {}) {
       [SESSION_ROUTE_PREFIX]: indexHtml,
       [`${SESSION_ROUTE_PREFIX}/:sid`]: indexHtml,
       [`${SESSION_ROUTE_PREFIX}/:sid/:aid`]: indexHtml,
+      // SPA deep links for the Feed (spec #98 M3).
+      [FEED_ROUTE_PREFIX]: indexHtml,
+      [`${FEED_ROUTE_PREFIX}/:sid`]: indexHtml,
+      [`${FEED_ROUTE_PREFIX}/:sid/:aid`]: indexHtml,
       "/mcp": {
         async POST(req) {
           try {

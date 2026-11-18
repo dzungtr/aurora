@@ -92,7 +92,7 @@ export function SessionList() {
 
   return (
     <div className="aur-preview">
-      <PreviewTopBar />
+      <PreviewTopBar active="artifacts" />
 
       <div className="aur-preview__body">
         <div className="aur-sesspage">

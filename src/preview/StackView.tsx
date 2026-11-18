@@ -38,7 +38,7 @@ const TYPE_META: Record<string, { label: string; icon: string; dark: string; lig
   audio: { label: "Audio", icon: "uil:music", dark: "#66bb6a", light: "#2e7d32" },
 };
 
-function typeMeta(type: string, theme: Theme) {
+export function typeMeta(type: string, theme: Theme) {
   const m = TYPE_META[type] ?? { label: type, icon: "uil:file", dark: "#9e9e9e", light: "#757575" };
   return { label: m.label, icon: m.icon, color: theme === "light" ? m.light : m.dark };
 }
@@ -116,7 +116,7 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
 
   return (
     <div className="aur-preview">
-      <PreviewTopBar />
+      <PreviewTopBar active="artifacts" />
 
       <div className="aur-stack3">
         {/* LEFT: SESSION RAIL (collapsible) */}

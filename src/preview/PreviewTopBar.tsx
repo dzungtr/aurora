@@ -1,17 +1,21 @@
-// Shared header for the preview surface: brand, Artifacts nav (with a
-// real unread badge summed across sessions), and the same-origin MCP
+// Shared header for the preview surface: brand, Feed and Artifacts nav (with
+// real unread badges: Feed sums channels, Artifacts sums all sessions), and the same-origin MCP
 // connection pill. The endpoint is always "connected" — this page loaded
 // from that same server, so there is nothing to health-check.
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
-import { SESSION_ROUTE_PREFIX } from "../../lib/routePaths";
+import { SESSION_ROUTE_PREFIX, FEED_ROUTE_PREFIX } from "../../lib/routePaths";
 import { PalettePicker } from "../components/PalettePicker";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { totalUnread, useUnreadCounts } from "./unreadStore";
+import { useChannels } from "./channelStore";
+import { feedUnread } from "./feedModel";
 
-export function PreviewTopBar() {
-  const unread = totalUnread(useUnreadCounts());
+export function PreviewTopBar({ active }: { active: "feed" | "artifacts" }) {
+  const counts = useUnreadCounts();
+  const unread = totalUnread(counts);
+  const feedBadge = feedUnread(counts, useChannels());
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -32,7 +36,11 @@ export function PreviewTopBar() {
       </div>
 
       <nav className="aur-preview__nav">
-        <a className="aur-preview__navlink is-active" href={SESSION_ROUTE_PREFIX}>
+        <a className={"aur-preview__navlink" + (active === "feed" ? " is-active" : "")} href={FEED_ROUTE_PREFIX}>
+          <Icon name="uil:newspaper" size={16} /> Feed
+          {feedBadge > 0 && <span className="aur-preview__navbadge">{feedBadge}</span>}
+        </a>
+        <a className={"aur-preview__navlink" + (active === "artifacts" ? " is-active" : "")} href={SESSION_ROUTE_PREFIX}>
           <Icon name="uil:presentation-play" size={16} /> Artifacts
           {unread > 0 && <span className="aur-preview__navbadge">{unread}</span>}
         </a>
