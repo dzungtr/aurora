@@ -1,7 +1,7 @@
 // HTTP client for the artifact browser (/s routes + artifact read API).
 // Mirrors the ArtifactStore shapes served by server.ts; UI logic stays here,
 // the server stays storage-shaped.
-import { SESSION_ROUTE_PREFIX, sessionPath, artifactPath } from "../../lib/routePaths";
+import { SESSION_ROUTE_PREFIX, FEED_ROUTE_PREFIX, sessionPath, artifactPath } from "../../lib/routePaths";
 
 export interface SessionMeta {
   session_id: string;
@@ -91,13 +91,29 @@ export function parsePreviewPath(pathname: string): { sid?: string; aid?: string
   }
 }
 
+/** Parse a Feed path (Feed route shapes from routePaths) into { sid, aid }; null when not a Feed path. */
+export function parseFeedPath(pathname: string): { sid?: string; aid?: string } | null {
+  if (pathname === FEED_ROUTE_PREFIX || pathname === `${FEED_ROUTE_PREFIX}/`) return {};
+  const m = pathname.match(new RegExp(`^${FEED_ROUTE_PREFIX}/([^/]+)(?:/([^/]+))?/?$`));
+  if (!m) return null;
+  try {
+    return {
+      sid: m[1] ? decodeURIComponent(m[1]) : undefined,
+      aid: m[2] ? decodeURIComponent(m[2]) : undefined,
+    };
+  } catch {
+    return { sid: undefined, aid: undefined };
+  }
+}
+
 export function previewUrl(sid: string, aid?: string): string {
   return aid ? artifactPath(sid, aid) : sessionPath(sid);
 }
 
-/** Client-side navigation: pushState + notify subscribers (App's router). */
-export function navigate(path: string): void {
-  window.history.pushState({}, "", path);
+/** Client-side navigation: pushState (or replaceState) + notify subscribers (App's router). */
+export function navigate(path: string, opts?: { replace?: boolean }): void {
+  if (opts?.replace) window.history.replaceState({}, "", path);
+  else window.history.pushState({}, "", path);
   window.dispatchEvent(new Event("aurora:navigate"));
 }
 
