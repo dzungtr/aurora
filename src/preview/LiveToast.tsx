@@ -5,10 +5,13 @@
 
 import { useEffect, useState } from "react";
 import { onArtifactEvent } from "./liveSocket";
-import { navigate, previewUrl } from "./previewApi";
+import { navigate } from "./previewApi";
+import { useChannels } from "./channelStore";
+import { toastViewPath } from "./feedModel";
 import { Icon } from "../components/Icon";
 
-export function LiveToast({ viewingSessionId }: { viewingSessionId?: string }) {
+export function LiveToast({ viewingSessionId, surface }: { viewingSessionId?: string; surface: "stack" | "feed" }) {
+  const channels = useChannels();
   const [toast, setToast] = useState<{ session_id: string; count: number } | null>(null);
 
   useEffect(() => {
@@ -32,7 +35,7 @@ export function LiveToast({ viewingSessionId }: { viewingSessionId?: string }) {
   const view = () => {
     const sessionId = toast.session_id;
     setToast(null);
-    navigate(previewUrl(sessionId)); // no artifact id → StackView resolves to latest
+    navigate(toastViewPath(surface, sessionId, channels)); // no artifact id → the target resolves to latest
   };
 
   return (

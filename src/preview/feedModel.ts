@@ -1,6 +1,8 @@
 // Pure Feed logic (spec #98 M4, M5, M8, M15): which sessions are tabs, which tab a
 // bare Feed route opens, what "live" means, and which state the view is in.
 
+import { feedPath, sessionPath } from "../../lib/routePaths";
+
 export const FEED_LIVE_WINDOW_MS = 15 * 60 * 1000;
 
 /** Tabs are every channel session, ordered by code unit (not locale) so the
@@ -81,4 +83,19 @@ export function feedViewState(
   if (!found) return { kind: "no-session", sid: sessionId };
   if (found.kind !== "channel") return { kind: "not-channel", sid: sessionId };
   return { kind: "channel", sid: sessionId };
+}
+
+/** Where a live toast's "View" goes (D20): a Feed reader stays in the Feed for channels; everything else opens the stack view. */
+export function toastViewPath(
+  surface: "stack" | "feed",
+  sid: string,
+  channels: { session_id: string }[] | null
+): string {
+  return surface === "feed" && channels?.some((c) => c.session_id === sid) ? feedPath(sid) : sessionPath(sid);
+}
+
+/** "HH:MM" in local time (24-hour), or "" when `iso` does not parse. */
+export function fmtUpdated(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 }
