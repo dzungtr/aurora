@@ -7,10 +7,11 @@ import { useEffect, useState, type MouseEvent } from "react";
 import { Icon } from "../components/Icon";
 import { feedPath, SESSION_ROUTE_PREFIX } from "../../lib/routePaths";
 import { PreviewTopBar } from "./PreviewTopBar";
+import { ArchivedBanner, DEFAULT_RETENTION_DAYS, FeedAside } from "./FeedAside";
 import { ArtifactStage } from "./ArtifactStage";
 import { useArtifactStack } from "./useArtifactStack";
 import { useChannels, useSessions } from "./channelStore";
-import { feedViewState, isLive } from "./feedModel";
+import { feedViewState, isArchived, isLive } from "./feedModel";
 import { getLastFeedChannel, setLastFeedChannel } from "./feedLastStore";
 import { navigate, previewUrl, type SessionWithCount } from "./previewApi";
 import { typeMeta } from "./StackView";
@@ -85,7 +86,7 @@ export function FeedEmpty() {
   );
 }
 
-function FeedStage({ sessionId, artifactId }: { sessionId: string; artifactId?: string }) {
+function FeedStage({ sessionId, artifactId, retentionDays }: { sessionId: string; artifactId?: string; retentionDays?: number }) {
   const theme = useTheme();
   // feedPath is a module-level function: a stable reference for the hook's effect deps.
   const { artifacts, current, error } = useArtifactStack({ sessionId, artifactId, urlFor: feedPath });
@@ -100,6 +101,9 @@ function FeedStage({ sessionId, artifactId }: { sessionId: string; artifactId?: 
           <span className="aur-stack3__artifacttitle">{current.title}</span>
           {/* #101 mounts the Live / Copy link buttons here, after the title; #103 adds Program. */}
         </div>
+      )}
+      {current && artifacts && isArchived(current, artifacts) && (
+        <ArchivedBanner artifact={current} sessionId={sessionId} retentionDays={retentionDays ?? DEFAULT_RETENTION_DAYS} />
       )}
       <div className="aur-feed__stage">
         {error && <p className="aur-preview__error">{error}</p>}
@@ -154,7 +158,7 @@ export function FeedView({ sessionId, artifactId }: FeedViewProps) {
   let body;
   if (state.kind === "loading" || state.kind === "resolve") body = <p className="aur-preview__empty">Loading…</p>;
   else if (state.kind === "empty") body = <FeedEmpty />;
-  else if (state.kind === "channel") body = <FeedStage sessionId={state.sid} artifactId={artifactId} />;
+  else if (state.kind === "channel") body = <FeedStage sessionId={state.sid} artifactId={artifactId} retentionDays={meta?.retention_days} />;
   else body = <FeedNotice kind={state.kind} sid={state.sid} />;
 
   return (
@@ -171,7 +175,9 @@ export function FeedView({ sessionId, artifactId }: FeedViewProps) {
       <div className="aur-feed__body">
         {/* Centre column: the drawer (#103) anchors to this column's right edge. */}
         <main className="aur-feed__center">{body}</main>
-        {/* #102 mounts the channel stack aside here, as a sibling of the centre column. */}
+        {state.kind === "channel" && (
+          <FeedAside sessionId={state.sid} artifactId={artifactId} retentionDays={meta?.retention_days} now={now} />
+        )}
       </div>
     </div>
   );
