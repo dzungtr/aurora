@@ -699,8 +699,23 @@
 }
 .aur-feed__archivedbtn:hover { border-color: var(--hair-strong); }
 
+/* Program drawer: anchored to the centre column's right edge, below the toolbar so Program stays clickable. */
+.aur-feed__drawer {
+  position: absolute; top: 46px; right: 0; bottom: 0; width: 440px; z-index: 20;
+  display: flex; flex-direction: column; background: var(--e1); border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, .08);
+}
+.aur-feed__drawerhead { height: 46px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--border); }
+.aur-feed__drawertitle { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.aur-feed__drawerbody {
+  flex: 1; min-height: 0; margin: 0; padding: 12px 14px; overflow: auto; white-space: pre; tab-size: 2;
+  font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; line-height: 1.6; color: var(--text-body);
+}
+.aur-feed__drawerfoot { flex: none; padding: 9px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-light); font-family: ui-monospace, SFMono-Regular, monospace; }
+
 @media (max-width: 900px) {
   .aur-feed__aside, .aur-feed__asidestrip { display: none; }
+  .aur-feed__drawer { width: min(440px, 100%); }
 }
 
 .aur-stack3__pane-md { padding: 34px 40px 60px; display: flex; justify-content: center; }
