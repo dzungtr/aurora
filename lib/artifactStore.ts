@@ -307,7 +307,17 @@ export class ArtifactStore {
     return removed;
   }
 
-  /** Private: pruning is the only caller; there is no human- or agent-facing artifact delete. */
+  /**
+   * Delete one artifact by id (explicit human action from the browser UI;
+   * not exposed over MCP). Returns false when the artifact does not exist.
+   * The session survives even when its last artifact is removed.
+   */
+  async deleteArtifact(sessionId: string, artifactId: string): Promise<boolean> {
+    if (!(await this.getArtifactMeta(sessionId, artifactId))) return false;
+    await this.removeArtifact(sessionId, artifactId);
+    return true;
+  }
+
   private async removeArtifact(sessionId: string, artifactId: string): Promise<void> {
     await rm(artifactDir(this.baseDir, sessionId, artifactId), { recursive: true, force: true });
   }

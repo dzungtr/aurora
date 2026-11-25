@@ -61,7 +61,7 @@ function fmtTime(iso: string): string {
 
 export function StackView({ sessionId, artifactId }: StackViewProps) {
   const [sessions, setSessions] = useState<SessionWithCount[] | null>(null);
-  const { artifacts, current, error, follow, toggleFollow } = useArtifactStack({
+  const { artifacts, current, error, follow, toggleFollow, deleteArtifact } = useArtifactStack({
     sessionId,
     artifactId,
     urlFor: previewUrl,
@@ -101,6 +101,11 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
     setCopied(true);
     clearTimeout(copyTimer.current);
     copyTimer.current = setTimeout(() => setCopied(false), 1400);
+  };
+
+  const removeArtifact = (id: string, title: string) => {
+    if (!confirm(`Delete artifact "${title}" from this session?`)) return;
+    void deleteArtifact(id);
   };
 
   const openStandalone = () => {
@@ -252,20 +257,29 @@ export function StackView({ sessionId, artifactId }: StackViewProps) {
             {stackItems.map(({ a, num }) => {
               const m = typeMeta(a.type, theme);
               return (
-                <a
-                  key={a.artifact_id}
-                  className={"aur-stack3__sideitem" + (a.artifact_id === current?.artifact_id ? " is-active" : "")}
-                  href={previewUrl(sessionId, a.artifact_id)}
-                >
-                  <div className="aur-stack3__siderow">
-                    <Icon name={m.icon} size={14} style={{ color: m.color }} />
-                    <span className="aur-stack3__sidetitle">{a.title}</span>
-                  </div>
-                  <div className="aur-stack3__sidemeta">
-                    <span className="aur-stack3__sidetime">{fmtTime(a.created_at)}</span>
-                    <span className="aur-stack3__sideindex">#{num}</span>
-                  </div>
-                </a>
+                <div key={a.artifact_id} className="aur-stack3__sidewrap">
+                  <a
+                    className={"aur-stack3__sideitem" + (a.artifact_id === current?.artifact_id ? " is-active" : "")}
+                    href={previewUrl(sessionId, a.artifact_id)}
+                  >
+                    <div className="aur-stack3__siderow">
+                      <Icon name={m.icon} size={14} style={{ color: m.color }} />
+                      <span className="aur-stack3__sidetitle">{a.title}</span>
+                    </div>
+                    <div className="aur-stack3__sidemeta">
+                      <span className="aur-stack3__sidetime">{fmtTime(a.created_at)}</span>
+                      <span className="aur-stack3__sideindex">#{num}</span>
+                    </div>
+                  </a>
+                  <button
+                    className="aur-stack3__sidedelete"
+                    title="Delete artifact"
+                    aria-label={`Delete artifact ${a.title}`}
+                    onClick={() => removeArtifact(a.artifact_id, a.title)}
+                  >
+                    <Icon name="uil:trash-alt" size={13} />
+                  </button>
+                </div>
               );
             })}
           </div>

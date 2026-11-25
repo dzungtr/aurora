@@ -411,6 +411,36 @@ describe("ArtifactStore.deleteSession", () => {
   });
 });
 
+describe("ArtifactStore.deleteArtifact", () => {
+  it("removes exactly one artifact and keeps the session and its siblings", async () => {
+    await store.pushMarkdown({ session_id: "s", title: "one", content: "1" });
+    await store.pushMarkdown({ session_id: "s", title: "two", content: "2" });
+    const [a, b] = await store.listArtifacts("s");
+    expect(await store.deleteArtifact("s", a.artifact_id)).toBe(true);
+    expect(existsSync(artifactDir(baseDir, "s", a.artifact_id))).toBe(false);
+    expect((await store.listArtifacts("s")).map((x) => x.artifact_id)).toEqual([b.artifact_id]);
+    expect(await store.getSession("s")).not.toBeNull();
+  });
+
+  it("keeps the session when its last artifact is deleted", async () => {
+    await store.pushMarkdown({ session_id: "s", title: "only", content: "1" });
+    const [a] = await store.listArtifacts("s");
+    await store.deleteArtifact("s", a.artifact_id);
+    expect(await store.listArtifacts("s")).toEqual([]);
+    expect(await store.getSession("s")).not.toBeNull();
+  });
+
+  it("returns false for an unknown artifact or session", async () => {
+    await store.pushMarkdown({ session_id: "s", title: "t", content: "c" });
+    expect(await store.deleteArtifact("s", "nope")).toBe(false);
+    expect(await store.deleteArtifact("nope", "nope")).toBe(false);
+  });
+
+  it("rejects traversal ids without touching disk", async () => {
+    await expect(store.deleteArtifact("s", "../x")).rejects.toBeInstanceOf(InvalidArtifactIdError);
+  });
+});
+
 describe("ArtifactStore.pushMermaid", () => {
   it("pushes with type mermaid, same append/replace semantics as markdown", async () => {
     const first = await store.pushMermaid({

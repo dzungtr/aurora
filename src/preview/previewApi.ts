@@ -57,6 +57,18 @@ export const previewApi = {
     return { ...raw.meta, session_id: raw.session_id, content: raw.content };
   },
 
+  /** Delete one artifact from a session (the session itself stays). */
+  async deleteArtifact(sessionId: string, artifactId: string): Promise<void> {
+    const res = await fetch(
+      `/api/preview/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error ?? `Request failed: ${res.status}`);
+    }
+  },
+
   /** Delete a session and all its artifacts from the store. */
   async deleteSession(sessionId: string): Promise<void> {
     const res = await fetch(`/api/preview/sessions/${encodeURIComponent(sessionId)}`, {

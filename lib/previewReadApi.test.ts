@@ -68,3 +68,21 @@ describe("GET /api/preview/sessions/:sid/artifacts/:aid (path traversal)", () =>
     expect((await read.json()).content).toBe("hi");
   });
 });
+
+describe("DELETE /api/preview/sessions/:sid/artifacts/:aid", () => {
+  it("deletes one artifact by id, leaving siblings readable", async () => {
+    const keep = await pushMarkdown("del-s");
+    const drop = await pushMarkdown("del-s");
+    const res = await fetch(`${base}/api/preview/sessions/del-s/artifacts/${drop.artifact_id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect((await fetch(`${base}/api/preview/sessions/del-s/artifacts/${drop.artifact_id}`)).status).toBe(404);
+    expect((await fetch(`${base}/api/preview/sessions/del-s/artifacts/${keep.artifact_id}`)).status).toBe(200);
+  });
+
+  it("404s an unknown artifact and a traversal id", async () => {
+    await pushMarkdown("del-s2");
+    expect((await fetch(`${base}/api/preview/sessions/del-s2/artifacts/nope`, { method: "DELETE" })).status).toBe(404);
+    expect((await fetch(`${base}/api/preview/sessions/del-s2/artifacts/..`, { method: "DELETE" })).status).toBe(404);
+  });
+});

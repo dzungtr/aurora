@@ -226,6 +226,16 @@ export function createServer(port: number, options: ServerOptions = {}) {
             return handleError(err);
           }
         },
+        async DELETE(req) {
+          const { sid, aid } = (req as any).params ?? {};
+          try {
+            const deleted = await artifactStore.deleteArtifact(sid, aid);
+            if (!deleted) return errorResponse(404, "Not found");
+            return Response.json({ ok: true });
+          } catch (err) {
+            return handleError(err);
+          }
+        },
       },
       "/api/preview/sessions/:sid/artifacts": {
         async GET(req) {
