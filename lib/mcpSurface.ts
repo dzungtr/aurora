@@ -39,6 +39,7 @@ import type { JobRegistry } from "./jobRegistry";
 import { resolveReference, type ReferenceInput, type ReferenceModality } from "./referenceResolver";
 import { sniffAudioMime } from "./audioMime";
 import type { VideoJobService } from "./videoGeneration";
+import { SEARCH_TYPES, MAX_SEARCH_LIMIT, DEFAULT_SEARCH_LIMIT, type ArtifactSearch, type SearchResponse } from "./artifactSearch";
 
 /**
  * Generation configuration injected through server options. The whitelist is
@@ -759,6 +760,67 @@ function registerReadTools(server: McpServer, store: ArtifactStore, baseUrl: str
 }
 
 /**
+ * Search tool (spec #118, D10, ADR-0013): a fourth read tool, additive beside
+ * the three above. The search service is a process-level singleton injected
+ * per request, because this surface builds a fresh MCP server every time.
+ */
+function registerSearchTool(server: McpServer, store: ArtifactStore, baseUrl: string, search: ArtifactSearch) {
+  server.registerTool(
+    "search_artifacts",
+    {
+      title: "Search artifacts",
+      description:
+        "Find artifacts by wording across every session, or within one session. Returns one hit per artifact " +
+        "(best first) with a short snippet and a deep link; call read_artifact(session_id, artifact_id) to read one. " +
+        "The response states its mode: \"keyword\" matches the words of the query literally (with the reason when " +
+        "semantic matching is unavailable, so rephrase with literal terms), \"hybrid\" also matches by meaning. " +
+        "Audio and video artifacts are not searchable.",
+      inputSchema: {
+        query: z.string().min(1).describe("What to look for, in your own words or with exact strings such as ids and tool names"),
+        session_id: ID_SCHEMA.optional().describe("Restrict the search to this session (from list_sessions); omit to search every session"),
+        type: z.enum(SEARCH_TYPES).optional().describe("Restrict the search to one artifact type"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAX_SEARCH_LIMIT)
+          .optional()
+          .describe(`Maximum hits (default ${DEFAULT_SEARCH_LIMIT}, max ${MAX_SEARCH_LIMIT})`),
+      },
+    },
+    async ({ query, session_id, type, limit }) => {
+      try {
+        if (query.trim().length === 0) return toolError("query must not be blank");
+        if (session_id !== undefined && !(await store.getSession(session_id))) {
+          return toolError(`Unknown session ${session_id}. Use list_sessions to see existing sessions.`);
+        }
+        const response = await search.search({ query, session_id, type, limit });
+        const hits = response.hits.map((hit) => ({
+          ...hit,
+          deep_link: `${baseUrl}${artifactPath(hit.session_id, hit.artifact_id)}`,
+        }));
+        return {
+          content: [{ type: "text" as const, text: searchText(response, hits.length) }],
+          structuredContent: { ...response, hits },
+        };
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+}
+
+function searchText(response: SearchResponse, shown: number): string {
+  const mode = response.mode === "keyword" && response.reason ? `keyword (${response.reason})` : response.mode;
+  const head = `${shown} of ${response.total} matching artifacts, mode ${mode}`;
+  if (shown === 0) return head;
+  const lines = response.hits.map(
+    (h) => `${h.session_id} | ${h.artifact_id} | ${h.type} | ${h.title} | updated ${h.updated_at} | ${h.snippet}`
+  );
+  return [head, ...lines, "Use read_artifact(session_id, artifact_id) to read a hit."].join("\n");
+}
+
+/**
  * Load the payload a read needs: audio/video resolve to null so their bytes
  * never enter the process (spec #67 D4). Images are loaded whole because the
  * decoded cap is enforced by the mapper, which names the blob URL instead of
@@ -1096,7 +1158,8 @@ export async function handleMcpRequest(
   baseUrl: string,
   mediaSizeCap: number = DEFAULT_MEDIA_SIZE_CAP,
   liveBus?: LiveBus,
-  generation?: GenerationOptions
+  generation?: GenerationOptions,
+  search?: ArtifactSearch
 ) {
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -1294,6 +1357,7 @@ export async function handleMcpRequest(
   registerPushUiTool(server, store, baseUrl, liveBus);
 
   registerReadTools(server, store, baseUrl);
+  if (search) registerSearchTool(server, store, baseUrl, search);
 
   await server.connect(transport);
   try {

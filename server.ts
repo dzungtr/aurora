@@ -9,6 +9,10 @@ import { OpenRouterClient, priceHintForEntry, videoPriceHintForEntry } from "./l
 import { SESSION_ROUTE_PREFIX, FEED_ROUTE_PREFIX } from "./lib/routePaths";
 import { JobRegistry } from "./lib/jobRegistry";
 import { VideoJobService } from "./lib/videoGeneration";
+import { SearchIndex, searchIndexPath } from "./lib/searchIndex";
+import { Indexer } from "./lib/indexer";
+import { ArtifactSearch, MAX_SEARCH_LIMIT, SEARCH_TYPES, type SearchType } from "./lib/artifactSearch";
+import { validateId } from "./lib/artifactStore";
 
 function errorResponse(status: number, message: string) {
   return Response.json({ error: message }, { status });
@@ -109,9 +113,29 @@ export function resolvePublicBaseUrl(externalPort: number, publicUrl?: string): 
   return `http://127.0.0.1:${externalPort}`;
 }
 
+/**
+ * Boot the search stack (ADR-0013): the Search index file inside the artifacts
+ * directory, the indexer subscribed to the live bus, and the search service.
+ * Process-level singletons — the MCP surface is stateless and builds a server
+ * per request, so these are injected into it. An unusable index disables
+ * search only; pushes and reads never depend on it.
+ */
+function startSearch(store: ArtifactStore, liveBus: LiveBus) {
+  try {
+    const index = new SearchIndex(searchIndexPath(store.baseDir));
+    const indexer = new Indexer({ store, index, embedding: null });
+    indexer.start(liveBus);
+    return { index, indexer, search: new ArtifactSearch({ index, store }) };
+  } catch (err) {
+    console.error("search index unavailable; search disabled:", err);
+    return undefined;
+  }
+}
+
 export function createServer(port: number, options: ServerOptions = {}) {
   const artifactStore = new ArtifactStore(options.artifactsDir ?? join(homedir(), ".local/share/aurora/artifacts"));
   const liveBus = new LiveBus();
+  const searchStack = startSearch(artifactStore, liveBus);
   let generation: GenerationOptions | undefined = options.generation;
   if (generation === undefined && process.env.OPENROUTER_API_KEY) {
     generation = { apiKey: process.env.OPENROUTER_API_KEY, baseUrl: "https://openrouter.ai/api/v1" };
@@ -121,7 +145,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
     startVideoJobService(generation, artifactStore, liveBus);
   }
   const externalPort = process.env.AURORA_PUBLIC_PORT ? Number(process.env.AURORA_PUBLIC_PORT) : port;
-  return Bun.serve({
+  const httpServer = Bun.serve({
     port,
     // Defaults to loopback-only, matching aurora's "binds to localhost only"
     // guarantee. Containers need this overridden to 0.0.0.0 — Docker's port
@@ -142,7 +166,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
       "/mcp": {
         async POST(req) {
           try {
-            return await handleMcpRequest(req, artifactStore, resolvePublicBaseUrl(externalPort, loadPublicUrl()), options.mediaSizeCap, liveBus, generation);
+            return await handleMcpRequest(req, artifactStore, resolvePublicBaseUrl(externalPort, loadPublicUrl()), options.mediaSizeCap, liveBus, generation, searchStack?.search);
           } catch (err) {
             console.error(err);
             return errorResponse(500, "MCP handler error");
@@ -161,6 +185,12 @@ export function createServer(port: number, options: ServerOptions = {}) {
           try {
             const deleted = await artifactStore.deleteSession(sid);
             if (!deleted) return errorResponse(404, "Not found");
+            try {
+              searchStack?.index.removeSession(sid);
+            } catch (err) {
+              // The index is derived data: its failure never undoes a successful delete.
+              console.error(`search index cleanup failed for session ${sid}:`, err);
+            }
             return Response.json({ ok: true });
           } catch (err) {
             return handleError(err);
@@ -231,6 +261,8 @@ export function createServer(port: number, options: ServerOptions = {}) {
           try {
             const deleted = await artifactStore.deleteArtifact(sid, aid);
             if (!deleted) return errorResponse(404, "Not found");
+            // Absent in the store, so the indexer drops its entry; queued behind any in-flight work.
+            await searchStack?.indexer.indexArtifact(sid, aid);
             return Response.json({ ok: true });
           } catch (err) {
             return handleError(err);
@@ -244,6 +276,35 @@ export function createServer(port: number, options: ServerOptions = {}) {
             const session = await artifactStore.getSession(sid);
             if (!session) return errorResponse(404, "Not found");
             return Response.json(await artifactStore.listArtifacts(sid));
+          } catch (err) {
+            return handleError(err);
+          }
+        },
+      },
+      "/api/preview/search": {
+        async GET(req) {
+          if (!searchStack) return errorResponse(503, "Search unavailable");
+          const params = new URL(req.url).searchParams;
+          const q = params.get("q")?.trim() ?? "";
+          if (q.length === 0) return errorResponse(400, "q is required");
+          const type = params.get("type") ?? undefined;
+          if (type !== undefined && !(SEARCH_TYPES as readonly string[]).includes(type)) {
+            return errorResponse(400, `type must be one of ${SEARCH_TYPES.join(", ")}`);
+          }
+          const limitParam = params.get("limit");
+          const limit = limitParam === null ? undefined : Number(limitParam);
+          if (limit !== undefined && !(Number.isInteger(limit) && limit >= 1 && limit <= MAX_SEARCH_LIMIT)) {
+            return errorResponse(400, `limit must be an integer from 1 to ${MAX_SEARCH_LIMIT}`);
+          }
+          const session = params.get("session") ?? undefined;
+          try {
+            if (session !== undefined) {
+              validateId(session);
+              if (!(await artifactStore.getSession(session))) return errorResponse(404, "Not found");
+            }
+            return Response.json(
+              await searchStack.search.search({ query: q, session_id: session, type: type as SearchType | undefined, limit })
+            );
           } catch (err) {
             return handleError(err);
           }
@@ -280,4 +341,7 @@ export function createServer(port: number, options: ServerOptions = {}) {
       return errorResponse(500, "Internal server error");
     },
   });
+  // Test hook: the indexer (`indexer.idle()` resolves when queued indexing has
+  // finished) and the index, for assertions on derived state.
+  return Object.assign(httpServer, { indexer: searchStack?.indexer, searchIndex: searchStack?.index });
 }
