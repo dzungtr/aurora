@@ -21,6 +21,8 @@ export interface UseArtifactStackResult {
   error: string | null;
   follow: boolean;
   toggleFollow: () => void;
+  /** Delete one artifact by id; moves off it when it is the open one. */
+  deleteArtifact: (artifactId: string) => Promise<void>;
 }
 
 export function useArtifactStack({ sessionId, artifactId, urlFor }: UseArtifactStackArgs): UseArtifactStackResult {
@@ -94,5 +96,24 @@ export function useArtifactStack({ sessionId, artifactId, urlFor }: UseArtifactS
     setFollowState(next);
   };
 
-  return { artifacts, current, error, follow, toggleFollow };
+  const deleteArtifact = async (id: string) => {
+    try {
+      await previewApi.deleteArtifact(sessionId, id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    const list = await previewApi.listArtifacts(sessionId).catch(() => null);
+    if (!aliveRef.current) return;
+    const remaining = list ?? (artifacts ?? []).filter((a) => a.artifact_id !== id);
+    setArtifacts(remaining);
+    if (id !== effectiveId) return;
+    // The open artifact is gone: land on its newer neighbour, else the newest older one, else the empty session.
+    const seq = (artifacts ?? []).find((a) => a.artifact_id === id)?.seq ?? 0;
+    const newer = remaining.filter((a) => a.seq > seq).sort((x, y) => x.seq - y.seq)[0];
+    const next = newer ?? latestOf(remaining);
+    navigate(urlFor(sessionId, next?.artifact_id));
+  };
+
+  return { artifacts, current, error, follow, toggleFollow, deleteArtifact };
 }

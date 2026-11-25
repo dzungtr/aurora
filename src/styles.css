@@ -738,6 +738,16 @@
   display: block; padding: 9px 10px; border-radius: 8px; margin-bottom: 6px; cursor: pointer;
   border: 1px solid var(--border); background: var(--e0); text-decoration: none; color: inherit; transition: border-color .1s;
 }
+.aur-stack3__sidewrap { position: relative; }
+.aur-stack3__sidewrap > .aur-stack3__sideitem { padding-right: 34px; }
+.aur-stack3__sidedelete {
+  position: absolute; top: 6px; right: 6px; display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: none; border-radius: 6px; background: transparent;
+  color: var(--text-light); cursor: pointer; opacity: 0; transition: opacity .1s;
+}
+.aur-stack3__sidewrap:hover .aur-stack3__sidedelete,
+.aur-stack3__sidedelete:focus-visible { opacity: 1; }
+.aur-stack3__sidedelete:hover { background: rgba(229, 57, 53, .14); color: #ef5350; }
 .aur-stack3__sideitem:hover { border-color: var(--hair-strong); }
 .aur-stack3__sideitem.is-active { border-color: var(--primary); background: var(--tint); }
 .aur-stack3__siderow { display: flex; align-items: center; gap: 7px; }
