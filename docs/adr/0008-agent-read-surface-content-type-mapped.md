@@ -1,6 +1,6 @@
 # Agent read surface with content-type-mapped responses
 
-Aurora's MCP surface was write-only (11 push/generate tools, zero reads). Epic #67 adds three read tools — `list_sessions` (paginated, `last_activity` desc, default page 50, includes total), `list_artifacts(session_id)` (type/mime/size per artifact), and `read_artifact(session_id, artifact_id, offset?)` — so agents can discover and re-inspect their own and other runs' output.
+Aurora's MCP surface was write-only (11 push/generate tools, zero reads). Epic #67 adds three read tools — `list_sessions` (paginated, `last_activity` desc, default page 50, includes total), `list_artifacts(session_id)` (type/mime/size per artifact), and `read_artifact(session_id, artifact_id, offset?)` — so agents can discover and re-inspect their own and other runs' output. A fourth read tool, `search_artifacts`, finds artifacts across sessions and is defined by ADR-0013.
 
 The core decision: **`read_artifact` responses are mapped by artifact type so a model only ever receives content it can understand.** The awareness decision happens at `list_artifacts` (type/mime/size metadata); reads then never ship unusable bytes. The mapping: markdown → full text (uncapped — the primary report format, human-ruled); mermaid/chart/ui → text capped at 256 KiB with an `offset` continuation param and a truncation marker carrying total size; image → MCP `image` content block (base64, ≤4 MiB decoded, else a text error naming the HTTP blob URL); audio/video → unsupported-type message with the deep link, bytes never cross MCP.
 
@@ -16,3 +16,11 @@ The core decision: **`read_artifact` responses are mapped by artifact type so a 
 - Text in a `read_artifact` response is mirrored into `structuredContent.text`, because some MCP clients surface only `structuredContent` and would otherwise show the agent an empty body. Image bytes are never mirrored.
 - Tool descriptions carry the type→response table verbatim; they are the agent-facing contract and must not drift from the implementation.
 - Evidence anchors (verified 2026-10-19, re-verify before changing the mapping): MCP spec 2025-11-25 ContentBlock schema; Claude platform vision docs; acplause GitHub issue #23; Z.AI vision MCP server docs.
+
+## Amendments
+
+_Pointers only — current decision above. Fallback `git log -p` on this file._
+
+| Date | PR | Change |
+|---|---|---|
+| 2026-11-25 | #124 | Read surface gains a fourth tool, `search_artifacts` (ADR-0013). |
