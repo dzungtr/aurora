@@ -23,4 +23,4 @@ _Pointers only — current decision above. Fallback `git log -p` on this file._
 
 | Date | PR | Change |
 |---|---|---|
-| 2026-11-25 | #TBD | Read surface gains a fourth tool, `search_artifacts` (ADR-0013). |
+| 2026-11-25 | #124 | Read surface gains a fourth tool, `search_artifacts` (ADR-0013). |

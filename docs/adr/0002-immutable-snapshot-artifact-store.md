@@ -9,4 +9,4 @@ _Pointers only — current decision above. Fallback `git log -p` on this file._
 | Date | PR | Change |
 |---|---|---|
 | 2026-11-17 | #87 | No-TTL rule scoped to ordinary sessions; channel sessions prune by retention (ADR-0009). |
-| 2026-11-25 | #TBD | Store gains a derived, rebuildable search index beside the snapshots (ADR-0013). |
+| 2026-11-25 | #124 | Store gains a derived, rebuildable search index beside the snapshots (ADR-0013). |
