@@ -7,7 +7,7 @@ Single-instance artifact host for TUI coding agents. Agents push artifacts over 
 ### Artifacts & sessions
 
 **Artifact**:
-One pushed item — markdown report, mermaid diagram, chart, image, or video — stored as an immutable snapshot.
+One pushed item — markdown report, mermaid diagram, chart, UI artifact, image, audio, or video — stored as an immutable snapshot.
 _Avoid_: page, document, file
 
 **Session**:
@@ -100,7 +100,7 @@ _Avoid_: frozen, expired, placeholder
 ### Agent read surface
 
 **Read surface**:
-The three read tools (`list_sessions`, `list_artifacts`, `read_artifact`) alongside the push/generate tools; the surface is no longer write-only (ADR-0008).
+The four read tools (`list_sessions`, `list_artifacts`, `read_artifact`, `search_artifacts`) alongside the push/generate tools; the surface is no longer write-only (ADR-0008, ADR-0013).
 _Avoid_: query API, download tools
 
 **Content-type awareness**:
@@ -110,6 +110,24 @@ _Avoid_: content negotiation, transcoding
 **Type-mapped response**:
 `read_artifact`'s per-type output: markdown → full text; mermaid/chart/ui → capped text with offset continuation; image → MCP image content block; audio/video → unsupported-type message, bytes never cross MCP.
 _Avoid_: raw download, blob response
+
+### Search
+
+**Search**:
+Finding artifacts by meaning or wording, across the whole store or within one session.
+_Avoid_: query, lookup, find
+
+**Search index**:
+The derived, rebuildable record of artifact content that search reads; never the source of truth (ADR-0013).
+_Avoid_: cache, database, vector store
+
+**Hit**:
+One artifact returned by a search, with a snippet of its best-matching passage.
+_Avoid_: result, match
+
+**Reindex**:
+The human-triggered, store-wide pass that brings the search index in line with the store.
+_Avoid_: rebuild, sync, refresh
 
 ### Live updates
 
