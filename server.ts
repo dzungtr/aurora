@@ -185,7 +185,12 @@ export function createServer(port: number, options: ServerOptions = {}) {
           try {
             const deleted = await artifactStore.deleteSession(sid);
             if (!deleted) return errorResponse(404, "Not found");
-            searchStack?.index.removeSession(sid);
+            try {
+              searchStack?.index.removeSession(sid);
+            } catch (err) {
+              // The index is derived data: its failure never undoes a successful delete.
+              console.error(`search index cleanup failed for session ${sid}:`, err);
+            }
             return Response.json({ ok: true });
           } catch (err) {
             return handleError(err);

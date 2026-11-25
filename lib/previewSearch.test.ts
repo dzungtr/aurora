@@ -10,6 +10,7 @@ import { searchIndexPath } from "./searchIndex";
 // Fixed loopback ports from the sandbox-allowed range (5000-5999).
 const PORT = 5302;
 const RESTART_PORT = 5303;
+const BROKEN_INDEX_PORT = 5304;
 const base = `http://127.0.0.1:${PORT}`;
 
 // Hermetic: no embedding endpoint, no generation provider, no real network.
@@ -165,6 +166,35 @@ describe("index file", () => {
       expect(((await (await fetch(`${origin}/api/preview/search?q=gazelle`)).json()) as any).hits).toHaveLength(1);
       srv.stop(true);
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("delete routes with an unusable search index", () => {
+  it("still delete the artifact and the session and answer as usual", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "aurora-preview-search-broken-"));
+    const origin = `http://127.0.0.1:${BROKEN_INDEX_PORT}`;
+    const srv = createServer(BROKEN_INDEX_PORT, { artifactsDir: dir });
+    try {
+      const doomed = await push(origin, srv, { session_id: "b1", title: "Doomed", content: "x" });
+      await push(origin, srv, { session_id: "b1", title: "Other", content: "y" });
+      await push(origin, srv, { session_id: "b2", title: "Lone", content: "z" });
+      srv.searchIndex!.close();
+
+      const artifactRes = await fetch(`${origin}/api/preview/sessions/b1/artifacts/${doomed}`, { method: "DELETE" });
+      expect(artifactRes.status).toBe(200);
+      expect(await artifactRes.json()).toEqual({ ok: true });
+      expect((await fetch(`${origin}/api/preview/sessions/b1/artifacts/${doomed}`)).status).toBe(404);
+
+      const sessionRes = await fetch(`${origin}/api/preview/sessions/b2`, { method: "DELETE" });
+      expect(sessionRes.status).toBe(200);
+      expect(await sessionRes.json()).toEqual({ ok: true });
+      expect((await fetch(`${origin}/api/preview/sessions/b2/artifacts`)).status).toBe(404);
+      // a retry reflects the store: the session is already gone
+      expect((await fetch(`${origin}/api/preview/sessions/b2`, { method: "DELETE" })).status).toBe(404);
+    } finally {
+      srv.stop(true);
       rmSync(dir, { recursive: true, force: true });
     }
   });
